@@ -1,0 +1,88 @@
+- Variáveis:
+int num1
+int num1 = 10
+var num1 = 20
+const num2 = 30
+
+Opcional:
+int? num1 = null
+
+- Funções:
+int function soma(int a, b) {}
+void function() {}()
+
+- Generics:
+void [T] function hello(T msg) {
+    log.print(msg)
+}
+
+- Loops:
+while() {}
+do {} while()
+for (int i, i < 10, i++) {}
+
+- Loop em listas:
+for (item in itens) {}
+for (i, item in itens) {}
+
+- Condições:
+if () {}
+if () {} else {}
+if () {} else if () {} else {}
+swith() {
+case:
+default:
+}
+
+- Classes:
+class User {
+    public string name
+    string lastName
+    protected string cpf
+    private int age
+
+    constructor() {
+        this.name = "Hello"
+    }
+}
+
+Declarando:
+User user = new User()
+
+- Tipos (pode haver adições):
+byte, char, string, int, float, double, boolean, error, component, void
+
+- Tipagem:
+type Role string
+enum Roles {}
+map
+set
+stack
+queue
+
+- Imports:
+import log
+import utils.validators
+import strings as strs
+import sqrt, pow from math
+import math.sin
+
+- Exports:
+export {}
+
+Nome do pacote definido pelo nome da pasta ou por:
+package utils.validators
+
+- Pacotes Nativos:
+http, websocket, router,
+json, console, strings, 
+math, time, validators, 
+crypto, errors, html, 
+os, env, sql
+
+- Observações:
+Linguagem inclui ponteiros
+Erros são variáveis do tipo error
+Linguagem é compilada e roda em Go
+Operadores lógicos semelhantes aos de Javascript
+; opicional (na maioria dos casos)
