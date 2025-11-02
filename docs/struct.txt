@@ -1,0 +1,22 @@
+alpha-compiler/
+├── cmd/
+│   └── alpha/                  # Ponto de entrada do compilador
+│       └── main.go
+├── internal/
+│   ├── lexer/                  # Tokenização: converte código em tokens
+│   ├── parser/                 # Análise sintática: gera AST
+│   ├── semantic/               # Verificação semântica: tipos, escopos, erros
+│   ├── ir/                     # Representação intermediária
+│   ├── codegen/                # Geração de código Go ou binário
+│   ├── linker/                 # Junta módulos compilados em um projeto final
+│   ├── resolver/               # Resolve imports, pacotes e dependências
+│   ├── types/                  # Sistema de tipos e inferência
+│   ├── stdlib/                 # Implementação dos pacotes nativos (math, json, etc.)
+│   └── utils/                  # Funções auxiliares e comuns
+├── runtime/                    # Opcional: VM ou suporte à execução
+├── examples/                   # Códigos de exemplo em Alpha
+├── test/                       # Testes unitários e de integração
+├── docs/                       # Documentação da linguagem e do compilador
+├── scripts/                    # Scripts de build, lint, etc.
+├── go.mod                      # Arquivo de módulo Go
+└── README.md                   # Descrição do projeto
