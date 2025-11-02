@@ -1,14 +1,10 @@
 package parser
 
 import (
-	"fmt"
-
 	"github.com/alpha/internal/lexer"
 )
 
 func (p *Parser) parseTopLevel() Stmt {
-	fmt.Printf("parseTopLevel enter cur=%q nxt=%q\n", p.cur.Lexeme, p.nxt.Lexeme)
-
 	if p.cur.Type == lexer.KEYWORD {
 		switch p.cur.Lexeme {
 		case "var":
@@ -26,15 +22,25 @@ func (p *Parser) parseTopLevel() Stmt {
 		}
 	}
 
+	if p.cur.Lexeme == "{" {
+		return &BlockStmt{Body: p.parseBlockLike()}
+	}
+
+	if p.cur.Lexeme == "}" {
+		return nil
+	}
+
 	return p.parseExprStmt()
 }
 
 func (p *Parser) parseVarDecl() Stmt {
 	p.advanceToken() // consome 'var'
+
 	if p.cur.Type != lexer.IDENT {
 		p.errorf("expected identifier after var at %d:%d", p.cur.Line, p.cur.Col)
 		return nil
 	}
+
 	name := p.cur.Lexeme
 	p.advanceToken() // consome identificador
 
@@ -43,15 +49,18 @@ func (p *Parser) parseVarDecl() Stmt {
 		p.advanceToken() // consome '='
 		init = p.parseExpression(LOWEST)
 	}
+
 	return &VarDecl{Name: name, Init: init}
 }
 
 func (p *Parser) parseConstDecl() Stmt {
 	p.advanceToken() // consome 'const'
+
 	if p.cur.Type != lexer.IDENT {
 		p.errorf("expected identifier after const at %d:%d", p.cur.Line, p.cur.Col)
 		return nil
 	}
+
 	name := p.cur.Lexeme
 	p.advanceToken() // consome identificador
 
@@ -59,8 +68,10 @@ func (p *Parser) parseConstDecl() Stmt {
 		p.errorf("expected = in const declaration at %d:%d", p.cur.Line, p.cur.Col)
 		return nil
 	}
+
 	p.advanceToken() // consome '='
 	init := p.parseExpression(LOWEST)
+
 	return &ConstDecl{Name: name, Init: init}
 }
 
@@ -70,62 +81,51 @@ func (p *Parser) parseExprStmt() Stmt {
 }
 
 func (p *Parser) parseReturn() Stmt {
-	p.advanceToken() // consome 'return' => p.cur agora é início da expressão de retorno (ou EOF)
-	if p.cur.Type == lexer.EOF {
+	p.advanceToken() // consome 'return'
+
+	if p.cur.Type == lexer.EOF || p.cur.Lexeme == "}" {
 		return &ReturnStmt{Value: nil}
 	}
+
 	val := p.parseExpression(LOWEST)
-	// NÃO avance aqui: deixe p.cur apontar para o último token do retorno
 	return &ReturnStmt{Value: val}
 }
 
 func (p *Parser) parseIf() Stmt {
-	// entrada: p.cur == "if"
-	p.advanceToken() // consome 'if', agora p.cur é token após 'if'
+	p.advanceToken() // consome 'if'
 
-	// consumir '(' se estiver presente e posicionar p.cur no primeiro token da condição
+	// Consumir '(' se presente
+	hasParen := false
 	if p.cur.Lexeme == "(" {
+		hasParen = true
 		p.advanceToken() // consome '('
 	}
 
-	// parse da condição (deve deixar p.cur no último token da condição)
 	cond := p.parseExpression(LOWEST)
-
-	// consumir ')' se ele estiver em p.cur ou em p.nxt
-	if p.cur.Lexeme == ")" {
-		p.advanceToken() // consome ')', p.cur -> token após ')'
-	} else if p.nxt.Lexeme == ")" {
-		p.advanceToken() // posiciona p.cur == ')'
-		p.advanceToken() // consome ')', p.cur -> token após ')'
+	if cond == nil {
+		p.errorf("invalid condition in if statement")
+		return nil
 	}
 
-	// se o bloco começa com '{' e ele está em p.nxt, posicione p.cur nele
-	if p.cur.Lexeme != "{" && p.nxt.Lexeme == "{" {
-		p.advanceToken() // posiciona p.cur == '{'
-	}
-
-	then := p.parseBlockLike()
-
-	var els []Stmt
-	// detectar else (pode estar em p.cur ou em p.nxt)
-	if p.cur.Lexeme == "else" || p.nxt.Lexeme == "else" {
-		// se else está em p.nxt, avance para ele
-		if p.nxt.Lexeme == "else" {
-			p.advanceToken() // p.cur == 'else'
+	// Consumir ')' se tínhamos '('
+	if hasParen {
+		if p.cur.Lexeme == ")" {
+			p.advanceToken() // consome ')'
+		} else {
+			p.errorf("expected ')' after if condition at %d:%d", p.cur.Line, p.cur.Col)
+			return nil
 		}
-		// agora p.cur == 'else', consumir e posicionar p.cur no token após 'else'
-		p.advanceToken() // consome 'else', p.cur -> token após 'else'
-
-		// se else começar com bloco e '{' estiver em p.nxt, posicione p.cur no '{'
-		if p.cur.Lexeme != "{" && p.nxt.Lexeme == "{" {
-			p.advanceToken() // posiciona p.cur == '{'
-		}
-
-		// parseBlockLike deixará p.cur == '}' ao retornar (se bloco) ou p.cur no último token do stmt simples
-		els = p.parseBlockLike()
 	}
 
-	return &IfStmt{Cond: cond, Then: then, Else: els}
+	thenBlock := p.parseBlockLike()
+
+	var elseBlock []Stmt
+	if p.cur.Lexeme == "else" {
+		p.advanceToken() // consome 'else'
+		elseBlock = p.parseBlockLike()
+	}
+
+	return &IfStmt{Cond: cond, Then: thenBlock, Else: elseBlock}
 }
 
 func (p *Parser) parseWhile() Stmt {
@@ -134,20 +134,13 @@ func (p *Parser) parseWhile() Stmt {
 	if p.cur.Lexeme == "(" {
 		p.advanceToken()
 	}
+
 	cond := p.parseExpression(LOWEST)
 
-	// consumir ')'
 	if p.cur.Lexeme == ")" {
-		p.advanceToken()
-	} else if p.nxt.Lexeme == ")" {
-		p.advanceToken()
-		p.advanceToken()
+		p.advanceToken() // consome ')'
 	}
 
-	// posicionar para bloco se necessário
-	if p.cur.Lexeme != "{" && p.nxt.Lexeme == "{" {
-		p.advanceToken()
-	}
 	body := p.parseBlockLike()
 	return &WhileStmt{Cond: cond, Body: body}
 }
@@ -159,9 +152,8 @@ func (p *Parser) parseFor() Stmt {
 	var cond Expr
 	var post Stmt
 
-	// suporte a for ( ... )
 	if p.cur.Lexeme == "(" {
-		p.advanceToken() // consome '(' -> p.cur é o primeiro token dentro dos parênteses
+		p.advanceToken() // consome '('
 
 		// init
 		if p.cur.Lexeme == "var" {
@@ -169,7 +161,7 @@ func (p *Parser) parseFor() Stmt {
 		} else if p.cur.Lexeme != ";" {
 			init = p.parseExprStmt()
 		}
-		// se o init retornou nil, parseVarDecl/parseExprStmt podem ter deixado p.cur apropriado
+
 		if p.cur.Lexeme == ";" {
 			p.advanceToken() // consome ';'
 		}
@@ -186,15 +178,12 @@ func (p *Parser) parseFor() Stmt {
 		if p.cur.Lexeme != ")" {
 			post = p.parseExprStmt()
 		}
-		// tentar consumir ')' quer esteja em p.cur ou em p.nxt
-		if p.cur.Lexeme == ")" {
-			// cur já é ')', deixamos como está (o chamador decide o avanço)
-		} else if p.nxt.Lexeme == ")" {
-			p.advanceToken() // posiciona p.cur == ')'
+
+		if p.nxt.Lexeme == ")" {
+			p.advanceToken()
 		}
 	}
 
-	// posicionar p.cur no '{' se o bloco estiver em p.nxt
 	if p.cur.Lexeme != "{" && p.nxt.Lexeme == "{" {
 		p.advanceToken()
 	}
@@ -204,32 +193,33 @@ func (p *Parser) parseFor() Stmt {
 }
 
 func (p *Parser) parseBlockLike() []Stmt {
-	// bloco { ... } : função consome '{' e PARSE os statements internos,
-	// mas NÃO consome o '}' ao retornar — deixa p.cur == '}'.
-	if p.cur.Lexeme == "{" {
-		p.advanceToken() // consome '{', p.cur == primeiro token dentro do bloco (ou '}')
-
-		var stmts []Stmt
-		for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
-			stmt := p.parseTopLevel()
-			if stmt != nil {
-				stmts = append(stmts, stmt)
-			}
-
-			// Se parseTopLevel deixou p.cur no '}' ou EOF, saia
-			if p.cur.Lexeme == "}" || p.cur.Type == lexer.EOF {
-				break
-			}
-
-			// Caso contrário, avance para o próximo statement interno
-			p.advanceToken()
+	if p.cur.Lexeme != "{" {
+		stmt := p.parseTopLevel()
+		if stmt != nil {
+			return []Stmt{stmt}
 		}
-
-		// NÃO consome '}' aqui. Deixa p.cur == '}' ao retornar.
-		return stmts
+		return nil
 	}
 
-	// single statement: parseTopLevel espera p.cur no início do statement
-	stmt := p.parseTopLevel()
-	return []Stmt{stmt}
+	p.advanceToken() // consome '{'
+
+	var stmts []Stmt
+	for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
+		stmt := p.parseTopLevel()
+		if stmt != nil {
+			stmts = append(stmts, stmt)
+		}
+
+		if p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
+			if !p.isAtStatementBoundary() {
+				p.advanceToken()
+			}
+		}
+	}
+
+	if p.cur.Lexeme == "}" {
+		p.advanceToken()
+	}
+
+	return stmts
 }
