@@ -1,6 +1,10 @@
 package parser
 
-import "github.com/alpha/internal/lexer"
+import (
+	"fmt"
+
+	"github.com/alpha/internal/lexer"
+)
 
 func (p *Parser) parseExpression(precedence int) Expr {
 	switch p.cur.Type {
@@ -9,7 +13,6 @@ func (p *Parser) parseExpression(precedence int) Expr {
 		if p.cur.Type != lexer.EOF && p.cur.Lexeme != "" {
 			p.errorf("unexpected token %q in expression at %d:%d", p.cur.Lexeme, p.cur.Line, p.cur.Col)
 		}
-
 		return nil
 	}
 
@@ -34,109 +37,160 @@ func (p *Parser) parseExpression(precedence int) Expr {
 		case "null":
 			left = &NullLiteral{}
 		default:
-			p.errorf("unexpected keyword %q at %d:%d", p.cur.Lexeme, p.cur.Line, p.cur.Col)
-			return nil
+			// Verificar se é uma função anônima
+			if isTypeKeyword(p.cur.Lexeme) && p.nxt.Lexeme == "function" {
+				left = p.parseFunctionExpr()
+			} else {
+				p.errorf("unexpected keyword %q at %d:%d", p.cur.Lexeme, p.cur.Line, p.cur.Col)
+				return nil
+			}
 		}
-
-		p.advanceToken()
+		if left != nil && !isFunctionExpr(left) {
+			p.advanceToken()
+		}
 	case lexer.OP:
 		switch p.cur.Lexeme {
-		case "-", "!", "+":
+		case "-", "!", "+", "++", "--": // operadores prefixo
 			op := p.cur.Lexeme
 			p.advanceToken()
 			right := p.parseExpression(PREFIX)
 			if right == nil {
 				return nil
 			}
-			left = &UnaryExpr{Op: op, Expr: right}
+			left = &UnaryExpr{Op: op, Expr: right, Postfix: false}
 		case "(":
-			p.advanceToken() // consome '('
+			p.advanceToken()
 			left = p.parseExpression(LOWEST)
 			if left == nil {
 				return nil
 			}
-
 			if p.cur.Lexeme == ")" {
-				p.advanceToken() // consome ')'
+				p.advanceToken()
 			} else {
 				p.errorf("expected ')' after subexpression at %d:%d", p.cur.Line, p.cur.Col)
 				return nil
 			}
+		case "{":
+			left = p.parseArrayLiteral()
 		default:
 			if p.cur.Lexeme == "{" {
 				return nil
 			}
-			p.errorf("unexpected operator %q at %d:%d", p.cur.Lexeme, p.cur.Line, p.cur.Col)
+			p.errorf("unexpected operator %q at start of expression at %d:%d", p.cur.Lexeme, p.cur.Line, p.cur.Col)
 			return nil
 		}
 	}
 
-	if p.cur.Type == lexer.EOF || isDelimiter(p.nxt.Lexeme) {
+	if left == nil {
+		return nil
+	}
+
+	if p.cur.Type == lexer.EOF {
 		return left
 	}
 
-	for p.cur.Type != lexer.EOF && isInfixOperator(p.cur) {
-		op := p.cur.Lexeme
-		pPrec := precedenceOf(op)
-		if pPrec < precedence {
-			break
+	return p.parsePostfixExpression(left, precedence)
+}
+
+func (p *Parser) parsePostfixExpression(left Expr, precedence int) Expr {
+	for {
+		// Chamada de função
+		if p.cur.Lexeme == "(" {
+			left = p.parseCallExpression(left)
+			continue
 		}
 
-		// Processar chamada de função
-		if op == "(" {
-			if _, isIdent := left.(*Identifier); !isIdent {
+		// Indexação de array
+		if p.cur.Lexeme == "[" {
+			left = p.parseIndexExpression(left)
+			continue
+		}
+
+		// Operadores pós-fixos
+		if p.cur.Lexeme == "++" || p.cur.Lexeme == "--" {
+			op := p.cur.Lexeme
+			p.advanceToken()
+			left = &UnaryExpr{Op: op, Expr: left, Postfix: true}
+			continue
+		}
+
+		// Operadores infix
+		if isInfixOperator(p.cur) {
+			op := p.cur.Lexeme
+			pPrec := precedenceOf(op)
+			if pPrec < precedence {
 				break
 			}
 
 			p.advanceToken()
-
-			args := []Expr{}
-			if p.cur.Lexeme != ")" {
-				for {
-					arg := p.parseExpression(LOWEST)
-					if arg == nil {
-						return nil
-					}
-					args = append(args, arg)
-
-					if p.cur.Lexeme == "," {
-						p.advanceToken()
-						continue
-					}
-					break
-				}
-			}
-
-			if p.cur.Lexeme == ")" {
-				p.advanceToken()
-			} else {
-				p.errorf("expected ')' to close call at %d:%d", p.cur.Line, p.cur.Col)
+			right := p.parseExpression(pPrec)
+			if right == nil {
 				return nil
 			}
 
-			left = &CallExpr{Callee: left, Args: args}
+			if op == "=" {
+				left = &AssignExpr{Left: left, Right: right}
+			} else {
+				left = &BinaryExpr{Left: left, Op: op, Right: right}
+			}
 			continue
 		}
 
-		nextPrec := precedenceOf(op)
-		if op == "=" {
-			nextPrec = LOWEST // assignment tem baixa precedência
-		}
-
-		p.advanceToken()
-		right := p.parseExpression(nextPrec)
-		if right == nil {
-			return nil
-		}
-
-		if op == "=" {
-			left = &AssignExpr{Left: left, Right: right}
-		} else {
-			left = &BinaryExpr{Left: left, Op: op, Right: right}
-		}
+		break
 	}
 
 	return left
+}
+
+// parseCallExpression parseia chamadas de função
+func (p *Parser) parseCallExpression(left Expr) Expr {
+	fmt.Printf("parseCallExpression: starting, left=%T\n", left)
+	p.advanceToken() // consume '('
+
+	args := []Expr{}
+	if p.cur.Lexeme != ")" {
+		for {
+			arg := p.parseExpression(LOWEST)
+			if arg == nil {
+				return nil
+			}
+			args = append(args, arg)
+
+			if p.cur.Lexeme == "," {
+				p.advanceToken()
+				continue
+			}
+			break
+		}
+	}
+
+	if p.cur.Lexeme == ")" {
+		p.advanceToken()
+	} else {
+		p.errorf("expected ')' to close function call at %d:%d", p.cur.Line, p.cur.Col)
+		return nil
+	}
+
+	return &CallExpr{Callee: left, Args: args}
+}
+
+// Função auxiliar para verificar se é expressão de função
+func isFunctionExpr(expr Expr) bool {
+	_, ok := expr.(*FunctionExpr)
+	return ok
+}
+
+// Novas funções auxiliares
+func isPrefixOperator(op string) bool {
+	return op == "-" || op == "!" || op == "++" || op == "--"
+}
+
+func isPostfixOperator(op string) bool {
+	return op == "++" || op == "--"
+}
+
+func (p *Parser) isAtEnd() bool {
+	return p.cur.Type == lexer.EOF
 }
 
 func isInfixOperator(token lexer.Token) bool {
@@ -149,14 +203,14 @@ func isInfixOperator(token lexer.Token) bool {
 		">=": true, "<=": true, ">": true, "<": true,
 		"==": true, "!=": true, "&&": true, "||": true,
 		"=": true, "+=": true, "-=": true, "*=": true, "/=": true,
+		"++": true, "--": true, // ADICIONAR ESTAS LINHAS
 	}
-
 	return infixOps[token.Lexeme]
 }
 
 func isDelimiter(lexeme string) bool {
 	switch lexeme {
-	case ")", "}", ";", ",", "{", "":
+	case ")", "}", ";", ",", "{", "", "(", "[", "]":
 		return true
 	default:
 		return false

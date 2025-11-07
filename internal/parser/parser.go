@@ -28,6 +28,7 @@ func (p *Parser) advanceToken() {
 
 	p.cur = p.nxt
 	p.nxt = p.sc.NextToken()
+	fmt.Printf("advanceToken: %q -> %q (nxt=%q)\n", p.cur.Lexeme, p.nxt.Lexeme, p.nxt.Lexeme)
 }
 
 func (p *Parser) curType() lexer.TokenType  { return p.cur.Type }
@@ -50,20 +51,27 @@ func (p *Parser) ParseProgram() *Program {
 	prog := &Program{Body: []Stmt{}}
 
 	for p.curType() != lexer.EOF && p.cur.Lexeme != "" {
+		fmt.Printf("=== Iteração %d: cur=%q nxt=%q ===\n", len(prog.Body), p.cur.Lexeme, p.nxt.Lexeme)
+
+		previousToken := p.cur.Lexeme
+
 		stmt := p.parseTopLevel()
 		if stmt != nil {
 			prog.Body = append(prog.Body, stmt)
+			fmt.Printf("=== Adicionado: %T ===\n", stmt)
 		}
 
-		if p.curType() == lexer.EOF || p.cur.Lexeme == "" {
-			break
-		}
-
-		if !p.isAtStatementBoundary() {
+		if stmt == nil && p.cur.Lexeme == previousToken && p.curType() != lexer.EOF {
+			fmt.Printf("=== Token preso em %q, avançando manualmente ===\n", p.cur.Lexeme)
 			p.advanceToken()
+		}
+
+		if p.curType() == lexer.EOF {
+			break
 		}
 	}
 
+	fmt.Printf("=== Programa completo com %d statements ===\n", len(prog.Body))
 	return prog
 }
 
@@ -71,6 +79,10 @@ func (p *Parser) isAtStatementBoundary() bool {
 	if p.cur.Type == lexer.KEYWORD {
 		switch p.cur.Lexeme {
 		case "var", "const", "if", "while", "for", "return":
+			return true
+		}
+
+		if isTypeKeyword(p.cur.Lexeme) {
 			return true
 		}
 	}
@@ -90,4 +102,22 @@ func (p *Parser) parseNumberToken(tok lexer.Token) Expr {
 
 	f, _ := strconv.ParseFloat(tok.Value, 64)
 	return &FloatLiteral{Value: f}
+}
+
+var TypeKeywords = map[string]bool{
+	"int":       true,
+	"string":    true,
+	"float":     true,
+	"bool":      true,
+	"void":      true,
+	"byte":      true,
+	"char":      true,
+	"double":    true,
+	"boolean":   true,
+	"error":     true,
+	"component": true,
+}
+
+func isTypeKeyword(lex string) bool {
+	return TypeKeywords[lex]
 }

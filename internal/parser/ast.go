@@ -1,12 +1,28 @@
 package parser
 
-// AST simples: Stmt (decl/stmt) e Expr (expressões)
-
 // Stmt representa uma instrução/declaração
 type Stmt interface{ stmtNode() }
 
 // Expr representa uma expressão
 type Expr interface{ exprNode() }
+
+// Type representa um tipo na linguagem
+type Type interface{ typeNode() }
+
+// PrimitiveType representa tipos básicos como int, string, etc.
+type PrimitiveType struct {
+	Name string // ex: "int", "string", "float"
+}
+
+func (*PrimitiveType) typeNode() {}
+
+// ArrayType representa um tipo de array
+type ArrayType struct {
+	ElementType Type
+	Size        Expr // pode ser nil para arrays dinâmicos
+}
+
+func (*ArrayType) typeNode() {}
 
 type Program struct {
 	Body []Stmt
@@ -15,6 +31,7 @@ type Program struct {
 // Statements / Declarações
 type VarDecl struct {
 	Name string
+	Type Type // pode ser nil se inferido (ex: var x = 10)
 	Init Expr // pode ser nil
 }
 
@@ -57,6 +74,63 @@ type ForStmt struct {
 
 func (f *ForStmt) stmtNode() {}
 
+type ForInStmt struct {
+	Index    *Identifier // pode ser nil (apenas item)
+	Item     *Identifier
+	Iterable Expr
+	Body     []Stmt
+}
+
+func (f *ForInStmt) stmtNode() {}
+
+// FunctionDecl representa uma declaração de função
+type FunctionDecl struct {
+	Name       string
+	Generics   []*GenericParam // Parâmetros genéricos [T, U]
+	Params     []*Param        // Parâmetros da função
+	ReturnType Type            // Tipo de retorno
+	Body       []Stmt          // Corpo da função
+}
+
+func (f *FunctionDecl) stmtNode() {}
+func (f *FunctionDecl) nodePos()  {}
+
+// GenericParam representa um parâmetro genérico como [T]
+type GenericParam struct {
+	Name string
+}
+
+func (g *GenericParam) typeNode() {}
+func (g *GenericParam) nodePos()  {}
+
+// Param representa um parâmetro de função
+type Param struct {
+	Name string
+	Type Type
+}
+
+func (p *Param) nodePos() {}
+
+// FunctionType representa um tipo de função
+type FunctionType struct {
+	Params     []Type
+	ReturnType Type
+}
+
+func (f *FunctionType) typeNode() {}
+func (f *FunctionType) nodePos()  {}
+
+// FunctionExpr representa uma expressão de função (função anônima)
+type FunctionExpr struct {
+	Generics   []*GenericParam
+	Params     []*Param
+	ReturnType Type
+	Body       []Stmt
+}
+
+func (f *FunctionExpr) exprNode() {}
+func (f *FunctionExpr) nodePos()  {}
+
 type ReturnStmt struct {
 	Value Expr // pode ser nil
 }
@@ -95,8 +169,9 @@ type NullLiteral struct{}
 func (n *NullLiteral) exprNode() {}
 
 type UnaryExpr struct {
-	Op   string
-	Expr Expr
+	Op      string
+	Expr    Expr
+	Postfix bool // true para i++, false para ++i
 }
 
 func (u *UnaryExpr) exprNode() {}
@@ -122,3 +197,18 @@ type AssignExpr struct {
 }
 
 func (a *AssignExpr) exprNode() {}
+
+// ArrayLiteral representa um literal de array {1, 2, 3}
+type ArrayLiteral struct {
+	Elements []Expr
+}
+
+func (a *ArrayLiteral) exprNode() {}
+
+// IndexExpr representa acesso a array: arr[index]
+type IndexExpr struct {
+	Array Expr
+	Index Expr
+}
+
+func (i *IndexExpr) exprNode() {}

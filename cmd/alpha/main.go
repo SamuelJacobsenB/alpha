@@ -2,71 +2,82 @@ package main
 
 import (
 	"fmt"
-	"log"
 
-	"github.com/alpha/internal/codegen"
-	"github.com/alpha/internal/ir"
 	"github.com/alpha/internal/lexer"
 	"github.com/alpha/internal/parser"
 )
 
 func main() {
 	source := `
-		// exemplo de código Alpha
-		var idade = 25
-		var nome = "Samuel"
-		if (idade >= 18) {
-			return "maior de idade"
-		}
-	`
+        // Função simples
+        int function soma(int a, int b) {
+            return a + b
+        }
+        
+        // Função void
+        void function dizerOla(string nome) {}
+        
+        // Função com genéricos
+        void [T] function processar(T item) {}
+        
+        // Variável com função anônima
+        var funcao = void function() {}
+        
+        // Chamadas de função
+        int resultado = soma(5, 3)
+        dizerOla("Mundo")
+        processar<int>(42)
+        
+        // Função recursiva
+        int function fatorial(int n) {
+            if (n <= 1) {
+                return 1
+            }
+            return n * fatorial(n - 1)
+        }
+    `
 
-	// === Etapa 1: Lexing (Tokens) ===
-	fmt.Println("=== TOKENS ===")
-	scTokens := lexer.NewScanner(source)
-	for {
-		tok := scTokens.NextToken()
-		fmt.Printf("%s\t%q\tat %d:%d\n", tok.Type, tok.Lexeme, tok.Line, tok.Col)
-		if tok.Type == lexer.EOF {
-			break
-		}
-	}
+	fmt.Println("=== TESTE SEM LIMITES DA LINGUAGEM ALPHA ===")
 
-	// === Etapa 2: Parsing (AST) ===
-	fmt.Println("\n=== AST ===")
 	sc := lexer.NewScanner(source)
 	pr := parser.New(sc)
 	ast := pr.ParseProgram()
 
 	if pr.HasErrors() {
-		fmt.Println("Parse errors:")
+		fmt.Println("ERROS ENCONTRADOS:")
 		fmt.Println(pr.ErrorsText())
-		return
-	}
+	} else {
+		fmt.Printf("✅ Análise concluída com sucesso! %d statements\n\n", len(ast.Body))
 
-	for _, stmt := range ast.Body {
-		fmt.Printf("%#v\n", stmt)
-	}
+		for i, stmt := range ast.Body {
+			fmt.Printf("%d. %T\n", i+1, stmt)
 
-	// === Etapa 3: IR ===
-	fmt.Println("\n=== IR ===")
-	b := ir.NewBuilder()
-	mod, err := b.BuildModule(ast)
-	if err != nil {
-		log.Fatalf("IR build error: %v", err)
-	}
-	ir.DumpModule(mod)
+			switch s := stmt.(type) {
+			case *parser.FunctionDecl:
+				fmt.Printf("   FUNÇÃO: %s", s.Name)
+				if len(s.Generics) > 0 {
+					fmt.Printf(" [%d genéricos]", len(s.Generics))
+				}
+				fmt.Printf(" -> %d parâmetros, %d statements\n", len(s.Params), len(s.Body))
 
-	// === Etapa 4: Otimização ===
-	ir.ConstFold(mod)
-	fmt.Println("\n=== IR After ConstFold ===")
-	ir.DumpModule(mod)
+			case *parser.VarDecl:
+				fmt.Printf("   VAR: %s", s.Name)
+				if s.Init != nil {
+					if _, ok := s.Init.(*parser.FunctionExpr); ok {
+						fmt.Printf(" = função anônima")
+					}
+				}
+				fmt.Println()
 
-	// === Etapa 5: Execução na VM ===
-	fmt.Println("\n=== Executando VM ===")
-	vm := codegen.NewVM(mod)
-	val, err := vm.RunMain()
-	if err != nil {
-		log.Fatalf("runtime error: %v", err)
+			case *parser.ExprStmt:
+				if call, ok := s.Expr.(*parser.CallExpr); ok {
+					fmt.Printf("   CHAMADA: ")
+					if ident, ok := call.Callee.(*parser.Identifier); ok {
+						fmt.Printf("%s", ident.Name)
+					}
+					fmt.Printf("(%d args)\n", len(call.Args))
+				}
+			}
+		}
 	}
-	fmt.Println("Valor retornado:", val)
 }

@@ -25,9 +25,23 @@ type Token struct {
 
 // keywords simples
 var keywords = map[string]struct{}{
-	"int": {}, "var": {}, "const": {}, "function": {},
-	"class": {}, "if": {}, "else": {}, "while": {}, "for": {},
-	"return": {}, "true": {}, "false": {}, "null": {}, "type": {},
-	"enum": {}, "import": {}, "export": {}, "constructor": {},
-	"break": {}, "continue": {}, "switch": {}, "case": {}, "default": {}, "package": {},
+	// Tipos primitivos
+	"int": {}, "string": {}, "float": {}, "boolean": {}, "void": {},
+	"byte": {}, "char": {}, "double": {}, "error": {}, "component": {},
+
+	// Palavras-chave de declaração
+	"var": {}, "const": {}, "function": {}, "class": {}, "type": {}, "enum": {},
+
+	// Controle de fluxo
+	"if": {}, "else": {}, "while": {}, "for": {}, "in": {}, "return": {},
+	"break": {}, "continue": {}, "switch": {}, "case": {}, "default": {},
+
+	// Valores
+	"true": {}, "false": {}, "null": {},
+
+	// Módulos
+	"import": {}, "export": {}, "package": {},
+
+	// OOP
+	"constructor": {},
 }

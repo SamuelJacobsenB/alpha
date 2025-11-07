@@ -1,6 +1,5 @@
 package lexer
 
-// lexIdentifier consome e determina KEYWORD ou IDENT
 func (s *Scanner) lexIdentifier() Token {
 	for !s.isEOF() {
 		ch := s.peek(0)
@@ -96,50 +95,45 @@ func (s *Scanner) lexOperator() Token {
 	ch := s.peek(0)
 	ch1 := s.peek(1)
 
-	// checks comuns (ordem otimizada para casos freq.)
-	if ch == '=' && ch1 == '=' {
-		s.advance()
-		s.advance()
-		return s.emit(OP)
-	}
-	if ch == '!' && ch1 == '=' {
-		s.advance()
+	// Casos para colchetes (já existe, mas vamos manter)
+	if ch == '[' || ch == ']' {
 		s.advance()
 		return s.emit(OP)
 	}
-	if ch == '<' && ch1 == '=' {
-		s.advance()
-		s.advance()
-		return s.emit(OP)
-	}
-	if ch == '>' && ch1 == '=' {
-		s.advance()
+
+	// Casos para parênteses e chaves
+	if ch == '(' || ch == ')' || ch == '{' || ch == '}' {
 		s.advance()
 		return s.emit(OP)
 	}
-	if ch == '&' && ch1 == '&' {
-		s.advance()
-		s.advance()
-		return s.emit(OP)
+
+	// Operadores de 2 caracteres
+	twoCharOps := map[string]bool{
+		"==": true, "!=": true, "<=": true, ">=": true,
+		"&&": true, "||": true, "++": true, "--": true,
+		"+=": true, "-=": true, "*=": true, "/=": true,
 	}
-	if ch == '|' && ch1 == '|' {
-		s.advance()
-		s.advance()
-		return s.emit(OP)
-	}
-	// ++ -- += -= /= etc.
-	if (ch == '+' || ch == '-' || ch == '/' || ch == '*') && ch1 == ch {
-		s.advance()
-		s.advance()
-		return s.emit(OP)
-	}
-	if (ch == '+' || ch == '-' || ch == '/' || ch == '*') && ch1 == '=' {
+
+	if twoCharOps[string(ch)+string(ch1)] {
 		s.advance()
 		s.advance()
 		return s.emit(OP)
 	}
 
-	// fallback 1-char
+	// Operadores de 1 caractere
+	oneCharOps := map[byte]bool{
+		'+': true, '-': true, '*': true, '/': true,
+		'%': true, '<': true, '>': true, '=': true,
+		'!': true, '&': true, '|': true, ';': true,
+		',': true, '.': true, ':': true,
+	}
+
+	if oneCharOps[ch] {
+		s.advance()
+		return s.emit(OP)
+	}
+
+	// Operador não reconhecido
 	s.advance()
-	return s.emit(OP)
+	return s.errorToken("operador não reconhecido: " + string(ch))
 }

@@ -1,25 +1,39 @@
 package parser
 
-// precedências (maior = maior prioridade)
 const (
 	_ int = iota
 	LOWEST
+	ASSIGNMENT // = += -= etc.
 	LOGICALOR  // ||
 	LOGICALAND // &&
 	EQUALITY   // == !=
 	COMPARISON // < > <= >=
 	SUM        // + -
 	PRODUCT    // * / %
-	PREFIX     // -X !X
+	PREFIX     // -X !X ++X --X
 	CALL       // func(...)
+	INDEX      // [] - acesso a array
 )
 
 var precedences = map[string]int{
+	"=":  ASSIGNMENT,
+	"+=": ASSIGNMENT,
+	"-=": ASSIGNMENT,
+	"*=": ASSIGNMENT,
+	"/=": ASSIGNMENT,
 	"||": LOGICALOR,
 	"&&": LOGICALAND,
-	"==": EQUALITY, "!=": EQUALITY,
-	"<": COMPARISON, ">": COMPARISON, "<=": COMPARISON, ">=": COMPARISON,
-	"+": SUM, "-": SUM,
-	"*": PRODUCT, "/": PRODUCT, "%": PRODUCT,
-	"(": CALL,
+	"==": EQUALITY,
+	"!=": EQUALITY,
+	"<":  COMPARISON,
+	">":  COMPARISON,
+	"<=": COMPARISON,
+	">=": COMPARISON,
+	"+":  SUM,
+	"-":  SUM,
+	"*":  PRODUCT,
+	"/":  PRODUCT,
+	"%":  PRODUCT,
+	"(":  CALL,
+	"[":  INDEX,
 }

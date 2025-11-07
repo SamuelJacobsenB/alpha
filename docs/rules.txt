@@ -7,6 +7,14 @@ const num2 = 30
 Opcional:
 int? num1 = null
 
+- Lists:
+int[] linked = {1, 2}
+int[5] arr = {1, 2, 5, 6, 7}
+const arr = {1, 5}
+var arr = {4, 5, 6}
+
+-----------------------------------------------------------
+
 - Funções:
 int function soma(int a, b) {}
 void function() {}()
@@ -15,6 +23,8 @@ void function() {}()
 void [T] function hello(T msg) {
     log.print(msg)
 }
+
+-----------------------------------------------------------
 
 - Loops:
 while() {}
@@ -25,29 +35,21 @@ for (int i, i < 10, i++) {}
 for (item in itens) {}
 for (i, item in itens) {}
 
+-----------------------------------------------------------
+
 - Condições:
 if () {}
+
 if () {} else {}
+
 if () {} else if () {} else {}
+
 swith() {
 case:
 default:
 }
 
-- Classes:
-class User {
-    public string name
-    string lastName
-    protected string cpf
-    private int age
-
-    constructor() {
-        this.name = "Hello"
-    }
-}
-
-Declarando:
-User user = new User()
+-----------------------------------------------------------
 
 - Tipos (pode haver adições):
 byte, char, string, int, float, double, boolean, error, component, void
@@ -59,6 +61,8 @@ map
 set
 stack
 queue
+
+-----------------------------------------------------------
 
 - Imports:
 import log
@@ -73,12 +77,16 @@ export {}
 Nome do pacote definido pelo nome da pasta ou por:
 package utils.validators
 
+-----------------------------------------------------------
+
 - Pacotes Nativos:
 http, websocket, router,
 json, console, strings, 
 math, time, validators, 
 crypto, errors, html, 
 os, env, sql
+
+-----------------------------------------------------------
 
 - Observações:
 Linguagem inclui ponteiros

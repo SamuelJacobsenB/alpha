@@ -12,7 +12,6 @@ type Scanner struct {
 	tokenCol  int // coluna onde token corrente começou
 }
 
-// NewScanner cria scanner a partir de string fonte
 func NewScanner(src string) *Scanner {
 	b := []byte(src)
 	return &Scanner{src: b, n: len(b), index: 0, start: 0, line: 1, col: 1}
