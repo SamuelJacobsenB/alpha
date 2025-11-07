@@ -93,7 +93,6 @@ type FunctionDecl struct {
 }
 
 func (f *FunctionDecl) stmtNode() {}
-func (f *FunctionDecl) nodePos()  {}
 
 // GenericParam representa um parâmetro genérico como [T]
 type GenericParam struct {
@@ -101,15 +100,12 @@ type GenericParam struct {
 }
 
 func (g *GenericParam) typeNode() {}
-func (g *GenericParam) nodePos()  {}
 
 // Param representa um parâmetro de função
 type Param struct {
 	Name string
 	Type Type
 }
-
-func (p *Param) nodePos() {}
 
 // FunctionType representa um tipo de função
 type FunctionType struct {
@@ -118,7 +114,6 @@ type FunctionType struct {
 }
 
 func (f *FunctionType) typeNode() {}
-func (f *FunctionType) nodePos()  {}
 
 // FunctionExpr representa uma expressão de função (função anônima)
 type FunctionExpr struct {
@@ -129,7 +124,14 @@ type FunctionExpr struct {
 }
 
 func (f *FunctionExpr) exprNode() {}
-func (f *FunctionExpr) nodePos()  {}
+
+// Adicione esta struct no arquivo ast.go se ainda não existir
+type GenericSpecialization struct {
+	Callee   Expr
+	TypeArgs []Type
+}
+
+func (g *GenericSpecialization) exprNode() {}
 
 type ReturnStmt struct {
 	Value Expr // pode ser nil

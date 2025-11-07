@@ -103,21 +103,3 @@ func (p *Parser) parseNumberToken(tok lexer.Token) Expr {
 	f, _ := strconv.ParseFloat(tok.Value, 64)
 	return &FloatLiteral{Value: f}
 }
-
-var TypeKeywords = map[string]bool{
-	"int":       true,
-	"string":    true,
-	"float":     true,
-	"bool":      true,
-	"void":      true,
-	"byte":      true,
-	"char":      true,
-	"double":    true,
-	"boolean":   true,
-	"error":     true,
-	"component": true,
-}
-
-func isTypeKeyword(lex string) bool {
-	return TypeKeywords[lex]
-}

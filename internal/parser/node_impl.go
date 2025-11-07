@@ -1,17 +1,23 @@
 package parser
 
 // implementações de nodePos para Stmts
-func (*PrimitiveType) nodePos() {}
-func (*ArrayType) nodePos()     {}
-func (*VarDecl) nodePos()       {}
-func (*ConstDecl) nodePos()     {}
-func (*ExprStmt) nodePos()      {}
-func (*IfStmt) nodePos()        {}
-func (*WhileStmt) nodePos()     {}
-func (*ForStmt) nodePos()       {}
-func (*ForInStmt) nodePos()     {}
-func (*ReturnStmt) nodePos()    {}
-func (*BlockStmt) nodePos()     {}
+func (*PrimitiveType) nodePos()         {}
+func (*ArrayType) nodePos()             {}
+func (*VarDecl) nodePos()               {}
+func (*ConstDecl) nodePos()             {}
+func (*ExprStmt) nodePos()              {}
+func (*IfStmt) nodePos()                {}
+func (*WhileStmt) nodePos()             {}
+func (*ForStmt) nodePos()               {}
+func (*ForInStmt) nodePos()             {}
+func (*FunctionDecl) nodePos()          {}
+func (*GenericParam) nodePos()          {}
+func (*Param) nodePos()                 {}
+func (*FunctionType) nodePos()          {}
+func (*FunctionExpr) nodePos()          {}
+func (*GenericSpecialization) nodePos() {}
+func (*ReturnStmt) nodePos()            {}
+func (*BlockStmt) nodePos()             {}
 
 // implementações de nodePos para Exprs
 func (*Identifier) nodePos()    {}
