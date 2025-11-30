@@ -13,6 +13,7 @@ const (
 	PREFIX     // -X !X ++X --X
 	CALL       // func(...)
 	INDEX      // [] - acesso a array
+	POSTFIX    // X++ X--
 )
 
 var precedences = map[string]int{
@@ -25,8 +26,8 @@ var precedences = map[string]int{
 	"&&": LOGICALAND,
 	"==": EQUALITY,
 	"!=": EQUALITY,
-	"<":  COMPARISON, // Usado para comparação, NÃO para genéricos
-	">":  COMPARISON, // Usado para comparação, NÃO para genéricos
+	"<":  COMPARISON,
+	">":  COMPARISON,
 	"<=": COMPARISON,
 	">=": COMPARISON,
 	"+":  SUM,
@@ -36,4 +37,6 @@ var precedences = map[string]int{
 	"%":  PRODUCT,
 	"(":  CALL,
 	"[":  INDEX,
+	"++": POSTFIX, // ⬅️ ADICIONADO
+	"--": POSTFIX, // ⬅️ ADICIONADO
 }

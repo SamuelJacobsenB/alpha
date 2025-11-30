@@ -16,6 +16,7 @@ func (p *Parser) parseTypedVarDecl() Stmt {
 
 	fmt.Printf("parseTypedVarDecl: parsed type %T, cur=%q\n", typ, p.cur.Lexeme)
 
+	// Verificar se o próximo token é um identificador
 	if p.cur.Type != lexer.IDENT {
 		p.errorf("expected identifier after type at %d:%d", p.cur.Line, p.cur.Col)
 		return nil
@@ -24,7 +25,29 @@ func (p *Parser) parseTypedVarDecl() Stmt {
 	name := p.cur.Lexeme
 	p.advanceToken()
 
-	init := p.parseOptionalInitializer()
+	// Só tentar parsear inicializador se houver '='
+	var init Expr
+	if p.cur.Lexeme == "=" {
+		p.advanceToken()
+		fmt.Printf("parseOptionalInitializer: after '=', cur=%q (type: %v)\n",
+			p.cur.Lexeme, p.cur.Type)
+
+		// Verificar se é um literal de mapa
+		switch p.cur.Lexeme {
+		case "{":
+			fmt.Println("parseOptionalInitializer: detected map literal")
+			init = p.parseMapLiteral()
+		case "[":
+			fmt.Println("parseOptionalInitializer: detected array/set literal")
+			init = p.parseArrayOrSetLiteral()
+		case "&":
+			fmt.Println("parseOptionalInitializer: detected reference expression")
+			init = p.parseReferenceExpr()
+		default:
+			init = p.parseExpression(LOWEST)
+			fmt.Printf("parseOptionalInitializer: parsed expression %T\n", init)
+		}
+	}
 
 	fmt.Printf("parseTypedVarDecl: completed %s %T, cur=%q\n", name, typ, p.cur.Lexeme)
 	return &VarDecl{Name: name, Type: typ, Init: init}

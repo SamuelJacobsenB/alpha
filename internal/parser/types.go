@@ -13,6 +13,35 @@ func isTypeKeyword(lex string) bool {
 }
 
 func (p *Parser) parseType() Type {
+	left := p.parseSingleType()
+	if left == nil {
+		return nil
+	}
+
+	if p.cur.Lexeme == "|" {
+		return p.parseUnionType(left)
+	}
+
+	return left
+}
+
+func (p *Parser) parseUnionType(firstType Type) Type {
+	types := []Type{firstType}
+
+	for p.cur.Lexeme == "|" {
+		p.advanceToken() // consume "|"
+
+		nextType := p.parseSingleType()
+		if nextType == nil {
+			return nil
+		}
+		types = append(types, nextType)
+	}
+
+	return &UnionType{Types: types}
+}
+
+func (p *Parser) parseSingleType() Type {
 	if !isTypeKeyword(p.cur.Lexeme) && p.cur.Type != lexer.IDENT {
 		return nil
 	}

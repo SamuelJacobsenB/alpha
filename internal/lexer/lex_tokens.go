@@ -3,9 +3,14 @@ package lexer
 func (s *Scanner) lexIdentifier() Token {
 	for !s.isEOF() {
 		ch := s.peek(0)
-		if isLetter(ch) || isDigit(ch) || ch == '_' || ch == '?' {
+		if isLetter(ch) || isDigit(ch) || ch == '_' {
 			s.advance()
 			continue
+		}
+		// Permitir '?' apenas no final (para tipos opcionais)
+		if ch == '?' && (s.index-s.start > 0) {
+			s.advance()
+			break
 		}
 		break
 	}
@@ -16,7 +21,7 @@ func (s *Scanner) lexIdentifier() Token {
 		return s.emit(KEYWORD)
 	}
 
-	// DETECÇÃO DE PARÂMETROS GENÉRICOS (T, U, etc.)
+	// Detecção de genéricos (T, U, etc.)
 	if len(lex) == 1 && lex[0] >= 'A' && lex[0] <= 'Z' {
 		return s.emit(GENERIC)
 	}

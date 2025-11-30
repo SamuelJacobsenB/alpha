@@ -5,10 +5,10 @@ import "github.com/alpha/internal/lexer"
 func (p *Parser) parseTopLevel() Stmt {
 	switch p.cur.Lexeme {
 	case "var":
-		return p.parseVarDecl() // ⬅️ CHAMA APENAS VAR
+		return p.parseVarDecl()
 	case "const":
-		return p.parseConstDecl() // ⬅️ CHAMA APENAS CONST
-	case "if", "while", "for", "return":
+		return p.parseConstDecl()
+	case "if", "while", "do", "for", "return":
 		return p.parseControlStmt()
 	default:
 		if isTypeKeyword(p.cur.Lexeme) {
@@ -37,5 +37,6 @@ func (p *Parser) syncToNextStmt() {
 
 func (p *Parser) isAtStmtStart() bool {
 	return p.cur.Lexeme == ";" || p.cur.Lexeme == "}" ||
-		p.cur.Type == lexer.KEYWORD || isTypeKeyword(p.cur.Lexeme)
+		p.cur.Type == lexer.KEYWORD || isTypeKeyword(p.cur.Lexeme) ||
+		p.cur.Lexeme == "{"
 }

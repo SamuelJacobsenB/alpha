@@ -8,6 +8,7 @@ func (*ConstDecl) nodePos()             {}
 func (*ExprStmt) nodePos()              {}
 func (*IfStmt) nodePos()                {}
 func (*WhileStmt) nodePos()             {}
+func (*DoWhileStmt) nodePos()           {}
 func (*ForStmt) nodePos()               {}
 func (*ForInStmt) nodePos()             {}
 func (*FunctionDecl) nodePos()          {}

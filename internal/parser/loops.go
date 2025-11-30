@@ -3,24 +3,28 @@ package parser
 import "github.com/alpha/internal/lexer"
 
 func (p *Parser) parseForTraditional() Stmt {
-	p.advanceToken()
 	if !p.expectAndConsume("(") {
 		return nil
 	}
+
 	var init Stmt
 	if p.cur.Lexeme != ";" {
 		init = p.parseForLoopInitializer()
 	}
+
 	if !p.expectAndConsume(";") {
 		return nil
 	}
+
 	var cond Expr
 	if p.cur.Lexeme != ";" {
 		cond = p.parseExpression(LOWEST)
 	}
+
 	if !p.expectAndConsume(";") {
 		return nil
 	}
+
 	var post Stmt
 	if p.cur.Lexeme != ")" {
 		postExpr := p.parseExpression(LOWEST)
@@ -28,32 +32,38 @@ func (p *Parser) parseForTraditional() Stmt {
 			post = &ExprStmt{Expr: postExpr}
 		}
 	}
+
 	if !p.expectAndConsume(")") {
 		return nil
 	}
+
 	body := p.parseBlockLike()
 	return &ForStmt{Init: init, Cond: cond, Post: post, Body: body}
 }
 
 func (p *Parser) parseForIn() Stmt {
-	p.advanceToken()
 	if !p.expectAndConsume("(") {
 		return nil
 	}
+
 	index, item := p.parseForInIdentifiers()
 	if item == nil {
 		return nil
 	}
+
 	if !p.expectAndConsume("in") {
 		return nil
 	}
+
 	iterable := p.parseExpression(LOWEST)
 	if iterable == nil {
 		return nil
 	}
+
 	if !p.expectAndConsume(")") {
 		return nil
 	}
+
 	body := p.parseBlockLike()
 	return &ForInStmt{Index: index, Item: item, Iterable: iterable, Body: body}
 }
@@ -87,31 +97,39 @@ func (p *Parser) parseForLoopInitializer() Stmt {
 	}
 }
 
+// CORREÇÃO: Função completamente reescrita
 func (p *Parser) isForInLoop() bool {
-	save := p.cur
-	defer func() { p.cur = save }()
+	// Salva o estado atual do parser
+	savedCur := p.cur
+	savedNxt := p.nxt
 
-	p.advanceToken()
+	defer func() {
+		// Restaura o estado original
+		p.cur = savedCur
+		p.nxt = savedNxt
+	}()
+
+	// Avança do token 'for' para o próximo
 	if p.cur.Lexeme != "(" {
 		return false
 	}
-	p.advanceToken()
-	count := 0
-	for p.cur.Type == lexer.IDENT {
-		count++
-		p.advanceToken()
-		if p.cur.Lexeme == "," {
-			p.advanceToken()
-			if p.cur.Type != lexer.IDENT {
-				return false
-			}
-			count++
-			p.advanceToken()
-		}
-		break
-	}
-	if count == 0 {
+	p.advanceToken() // consume '('
+
+	// Verifica se temos um identificador
+	if p.cur.Type != lexer.IDENT {
 		return false
 	}
+	p.advanceToken() // consume primeiro identificador
+
+	// Verifica se há vírgula (dois identificadores)
+	if p.cur.Lexeme == "," {
+		p.advanceToken() // consume ','
+		if p.cur.Type != lexer.IDENT {
+			return false
+		}
+		p.advanceToken() // consume segundo identificador
+	}
+
+	// Agora deve ser 'in'
 	return p.cur.Lexeme == "in"
 }

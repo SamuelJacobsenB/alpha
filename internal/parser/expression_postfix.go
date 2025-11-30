@@ -9,8 +9,17 @@ var infixOperators = map[string]bool{
 	"=": true, "+=": true, "-=": true, "*=": true, "/=": true,
 }
 
+var postfixOperators = map[string]bool{
+	"++": true,
+	"--": true,
+}
+
 func (p *Parser) isInfixOperator(token lexer.Token) bool {
 	return token.Type == lexer.OP && infixOperators[token.Lexeme]
+}
+
+func (p *Parser) isPostfixOperator(token lexer.Token) bool {
+	return token.Type == lexer.OP && postfixOperators[token.Lexeme]
 }
 
 func (p *Parser) precedenceOf(op string) int {
@@ -33,6 +42,13 @@ func (p *Parser) parseInfix(left Expr, precedence int) Expr {
 		return &AssignExpr{Left: left, Right: right}
 	}
 	return &BinaryExpr{Left: left, Op: op, Right: right}
+}
+
+// ⬇️ NOVA FUNÇÃO: parseia operadores pós-fixo
+func (p *Parser) parsePostfix(left Expr, precedence int) Expr {
+	op := p.cur.Lexeme
+	p.advanceToken()
+	return &UnaryExpr{Op: op, Expr: left, Postfix: true}
 }
 
 func (p *Parser) parseCall(left Expr) Expr {

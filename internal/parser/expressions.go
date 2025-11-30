@@ -23,10 +23,12 @@ func (p *Parser) parseExpression(precedence int) Expr {
 			left = p.parseCall(left)
 		case curOp == "[":
 			left = p.parseIndex(left)
-		case curOp == "<" && p.isGenericCall():
-			left = p.parseGenericCall(left)
 		case p.isInfixOperator(p.cur):
 			left = p.parseInfix(left, curPrec)
+		case curOp == "<" && p.isGenericCall():
+			left = p.parseGenericCall(left)
+		case p.isPostfixOperator(p.cur):
+			left = p.parsePostfix(left, curPrec)
 		default:
 			return left
 		}

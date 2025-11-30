@@ -8,6 +8,8 @@ func (p *Parser) parseControlStmt() Stmt {
 		return p.parseIf()
 	case "while":
 		return p.parseWhile()
+	case "do":
+		return p.parseDoWhile()
 	case "for":
 		return p.parseFor()
 	case "return":
@@ -43,12 +45,34 @@ func (p *Parser) parseWhile() Stmt {
 	return &WhileStmt{Cond: cond, Body: p.parseBlockLike()}
 }
 
+func (p *Parser) parseDoWhile() Stmt {
+	p.advanceToken() // consume 'do'
+
+	body := p.parseBlockLike()
+	if body == nil {
+		return nil
+	}
+
+	if !p.expectAndConsume("while") {
+		p.errorf("expected 'while' after do block")
+		return nil
+	}
+
+	cond := p.parseCondition()
+	if cond == nil {
+		return nil
+	}
+
+	return &DoWhileStmt{Body: body, Cond: cond}
+}
+
 func (p *Parser) parseFor() Stmt {
-	p.advanceToken()
+	p.advanceToken() // consume 'for'
 
 	if p.isForInLoop() {
 		return p.parseForIn()
 	}
+
 	return p.parseForTraditional()
 }
 
@@ -64,11 +88,19 @@ func (p *Parser) parseReturn() Stmt {
 
 func (p *Parser) parseCondition() Expr {
 	if !p.expectAndConsume("(") {
+		p.errorf("expected '(' after %s", p.cur.Lexeme)
 		return nil
 	}
 
 	cond := p.parseExpression(LOWEST)
+	if cond == nil {
+		p.errorf("expected condition expression")
+		p.syncToNextStmt()
+		return nil
+	}
+
 	if !p.expectAndConsume(")") {
+		p.errorf("expected ')' after condition")
 		return nil
 	}
 

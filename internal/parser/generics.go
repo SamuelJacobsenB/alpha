@@ -33,16 +33,23 @@ func (p *Parser) isGenericCall() bool {
 		return false
 	}
 	p.advanceToken()
+
 	if !isTypeKeyword(p.cur.Lexeme) && p.cur.Type != lexer.IDENT {
 		return false
 	}
+
 	for p.cur.Lexeme != ">" && p.cur.Type != lexer.EOF {
+		if !isTypeKeyword(p.cur.Lexeme) && p.cur.Type != lexer.IDENT && p.cur.Lexeme != "," {
+			return false
+		}
 		p.advanceToken()
 	}
+
 	if p.cur.Lexeme != ">" {
 		return false
 	}
 	p.advanceToken()
+
 	return p.cur.Lexeme == "("
 }
 

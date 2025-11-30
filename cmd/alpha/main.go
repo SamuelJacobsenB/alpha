@@ -8,10 +8,10 @@ import (
 )
 
 const source = `
-	int num
-	int num1 = 10
-	var num2 = 20
-	const num3 = 30
+	int a;
+	for(int i; i < 10; i++) {
+		a += i
+	}
 `
 
 func main() {
