@@ -1,0 +1,23 @@
+class User {
+    string name
+    int age
+    string cpf
+
+    constructor(string name, int age, string cpf) {
+        this.name = name
+        this.age = age
+        this.cpf = cpf
+    }
+
+    string method cpf() {
+        return this.cpf
+    }
+
+    <T> (string, int, T) method values(T generic) {
+        return this.name, this.age, generic
+    }
+}
+
+User user = new User("Samuel", 15, "111-111-111.11")
+var cpf = user.cpf()
+var name, age, num = <int> user.values(1000)

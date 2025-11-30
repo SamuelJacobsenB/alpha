@@ -1,0 +1,21 @@
+int function soma(int a, b) {
+    return a + b
+}
+int sum = soma(5, 10)
+
+string, error function isOldEnough(int age) {
+    if(age < 18) {
+        return "", errors.new("User not old enough")
+    }
+
+    return "Ok, welcome", null
+}
+
+<T> string function hello(T msg) {
+    return "Hello " + msg
+}
+var message = <int> hello(30)
+
+<A, B> string function hello(A a, B b) {
+    return string(a + b)
+}

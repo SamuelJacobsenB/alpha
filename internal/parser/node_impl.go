@@ -11,6 +11,7 @@ func (*WhileStmt) nodePos()             {}
 func (*ForStmt) nodePos()               {}
 func (*ForInStmt) nodePos()             {}
 func (*FunctionDecl) nodePos()          {}
+func (*IdentifierType) nodePos()        {}
 func (*GenericParam) nodePos()          {}
 func (*Param) nodePos()                 {}
 func (*FunctionType) nodePos()          {}
@@ -32,3 +33,13 @@ func (*CallExpr) nodePos()      {}
 func (*AssignExpr) nodePos()    {}
 func (*ArrayLiteral) nodePos()  {}
 func (*IndexExpr) nodePos()     {}
+
+func (*NullableType) nodePos()  {}
+func (*PointerType) nodePos()   {}
+func (*SetType) nodePos()       {}
+func (*MapType) nodePos()       {}
+func (*UnionType) nodePos()     {}
+func (*SetLiteral) nodePos()    {}
+func (*MapLiteral) nodePos()    {}
+func (*MapEntry) nodePos()      {}
+func (*ReferenceExpr) nodePos() {}

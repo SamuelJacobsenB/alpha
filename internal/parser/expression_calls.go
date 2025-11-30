@@ -19,29 +19,6 @@ func (p *Parser) parseCallExpression(left Expr) Expr {
 	return &CallExpr{Callee: left, Args: args}
 }
 
-func (p *Parser) parseArgumentList() []Expr {
-	var args []Expr
-
-	if p.cur.Lexeme == ")" {
-		return args // empty argument list
-	}
-
-	for {
-		arg := p.parseExpression(LOWEST)
-		if arg == nil {
-			return nil
-		}
-		args = append(args, arg)
-
-		if p.cur.Lexeme != "," {
-			break
-		}
-		p.advanceToken() // consume ','
-	}
-
-	return args
-}
-
 func (p *Parser) parseIndexExpression(left Expr) Expr {
 	fmt.Printf("parseIndexExpression: starting\n")
 	p.advanceToken() // consume '['

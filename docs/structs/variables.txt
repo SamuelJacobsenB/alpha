@@ -1,0 +1,27 @@
+int num
+int num1 = 10
+var num2 = 20
+const num3 = 30
+
+int? num4 // null
+int? num5 = 10
+
+string[2] arr
+string[2] arr2 = ["Hello", "World"]
+var arr3 = ["Hello", "World"] // string[2] 
+string[] linked
+
+boolean ifLogged = true
+
+int hello = 30
+int* helloPointer = &hello
+
+set<int> nums = [1, 2, 4]
+map<int, string> mapTest = {
+    1: "Hello",
+    2: "Bye",
+}
+
+// Union types
+string | float types2 // ""
+types2 = 3,1415

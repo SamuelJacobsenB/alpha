@@ -3,7 +3,12 @@ package lexer
 // emit constrói token usando start..index (uma única conversão)
 func (s *Scanner) emit(t TokenType) Token {
 	lex := string(s.src[s.start:s.index])
-	tok := Token{Type: t, Lexeme: lex, Line: s.tokenLine, Col: s.tokenCol}
+	tok := Token{
+		Type:   t,
+		Lexeme: lex,
+		Line:   s.tokenLine,
+		Col:    s.tokenCol,
+	}
 
 	switch t {
 	case STRING:
@@ -18,6 +23,9 @@ func (s *Scanner) emit(t TokenType) Token {
 	default:
 		tok.Value = lex
 	}
+
+	s.lastTokenType = t
+
 	return tok
 }
 

@@ -7,7 +7,7 @@ import (
 )
 
 func (p *Parser) parseTypedVarDecl() Stmt {
-	fmt.Printf("parseTypedVarDecl: starting\n")
+	fmt.Printf("parseTypedVarDecl: starting with %q\n", p.cur.Lexeme)
 
 	typ := p.parseType()
 	if typ == nil {
@@ -26,7 +26,7 @@ func (p *Parser) parseTypedVarDecl() Stmt {
 
 	init := p.parseOptionalInitializer()
 
-	fmt.Printf("parseTypedVarDecl: completed %s, cur=%q\n", name, p.cur.Lexeme)
+	fmt.Printf("parseTypedVarDecl: completed %s %T, cur=%q\n", name, typ, p.cur.Lexeme)
 	return &VarDecl{Name: name, Type: typ, Init: init}
 }
 
@@ -41,8 +41,18 @@ func (p *Parser) parseVarDecl() Stmt {
 	name := p.cur.Lexeme
 	p.advanceToken()
 
+	// Verificar se há tipo explícito (ex: var x: int = 10)
+	var typ Type
+	if p.cur.Lexeme == ":" {
+		p.advanceToken()
+		typ = p.parseType()
+		if typ == nil {
+			return nil
+		}
+	}
+
 	init := p.parseOptionalInitializer()
-	return &VarDecl{Name: name, Init: init}
+	return &VarDecl{Name: name, Type: typ, Init: init}
 }
 
 func (p *Parser) parseConstDecl() Stmt {
@@ -70,8 +80,48 @@ func (p *Parser) parseConstDecl() Stmt {
 func (p *Parser) parseOptionalInitializer() Expr {
 	if p.cur.Lexeme == "=" {
 		p.advanceToken()
-		fmt.Printf("parseOptionalInitializer: after '=', cur=%q\n", p.cur.Lexeme)
-		return p.parseExpression(LOWEST)
+		fmt.Printf("parseOptionalInitializer: after '=', cur=%q (type: %v)\n",
+			p.cur.Lexeme, p.cur.Type)
+
+		// Verificar se é um literal de mapa
+		if p.cur.Lexeme == "{" {
+			fmt.Println("parseOptionalInitializer: detected map literal")
+			return p.parseMapLiteral()
+		}
+
+		// Verificar se é um literal de array/set
+		if p.cur.Lexeme == "[" {
+			fmt.Println("parseOptionalInitializer: detected array/set literal")
+			return p.parseArrayOrSetLiteral()
+		}
+
+		// Verificar se é uma expressão de referência
+		if p.cur.Lexeme == "&" {
+			fmt.Println("parseOptionalInitializer: detected reference expression")
+			return p.parseReferenceExpr()
+		}
+
+		expr := p.parseExpression(LOWEST)
+		fmt.Printf("parseOptionalInitializer: parsed expression %T\n", expr)
+		return expr
 	}
 	return nil
+}
+
+func (p *Parser) parseArrayOrSetLiteral() Expr {
+	fmt.Printf("parseArrayOrSetLiteral: starting at %q\n", p.cur.Lexeme)
+	p.advanceToken() // consume '['
+
+	elements := p.parseArrayElements()
+	if elements == nil {
+		return nil
+	}
+
+	if !p.expectAndConsume("]") {
+		p.errorf("expected ']' after array/set literal")
+		return nil
+	}
+
+	fmt.Printf("parseArrayOrSetLiteral: completed with %d elements\n", len(elements))
+	return &ArrayLiteral{Elements: elements}
 }

@@ -1,0 +1,20 @@
+type Number int | float
+Number num = 5.5
+
+type Message {
+    string text
+    string sender
+}
+Message message = {
+    text: "This is a message",
+    sender: "Samuel",
+}
+
+<T> type Car {
+    T motor
+    int year
+}
+Car car = <string> {
+    motor: "654MT4",
+    year: 2001,
+}

@@ -1,20 +1,8 @@
 package parser
 
 import (
-	"fmt"
-
 	"github.com/alpha/internal/lexer"
 )
-
-func (p *Parser) parseFunctionName() string {
-	if p.cur.Type != lexer.IDENT {
-		p.errorf("expected function name, got %q", p.cur.Lexeme)
-		return ""
-	}
-	name := p.cur.Lexeme
-	p.advanceToken()
-	return name
-}
 
 func (p *Parser) parseOptionalGenerics() []*GenericParam {
 	if p.cur.Lexeme == "[" {
@@ -24,38 +12,40 @@ func (p *Parser) parseOptionalGenerics() []*GenericParam {
 }
 
 func (p *Parser) parseFunctionParameters() []*Param {
-	fmt.Printf("parseFunctionParameters: starting, cur=%q\n", p.cur.Lexeme)
-
 	if !p.expectAndConsume("(") {
-		p.errorf("expected '(' after function name")
 		return nil
 	}
 
-	params := p.parseParameterList()
-
-	if !p.expectAndConsume(")") {
-		p.errorf("expected ')' after function parameters")
-		return nil
+	if p.cur.Lexeme == ")" {
+		p.advanceToken()
+		return []*Param{}
 	}
 
-	fmt.Printf("parseFunctionParameters: completed with %d params\n", len(params))
-	return params
-}
-
-func (p *Parser) parseParameterList() []*Param {
 	var params []*Param
 
-	for p.cur.Lexeme != ")" && p.cur.Type != lexer.EOF {
-		param := p.parseParameter()
-		if param == nil {
+	for {
+		paramType := p.parseType()
+		if paramType == nil {
 			return nil
 		}
-		params = append(params, param)
 
-		if p.cur.Lexeme == "," {
+		if p.cur.Type != lexer.IDENT {
+			p.errorf("expected parameter name")
+			return nil
+		}
+
+		params = append(params, &Param{
+			Name: p.cur.Lexeme,
+			Type: paramType,
+		})
+		p.advanceToken()
+
+		if p.cur.Lexeme == ")" {
 			p.advanceToken()
-		} else if p.cur.Lexeme != ")" {
-			p.errorf("expected ',' or ')' after parameter")
+			break
+		}
+
+		if !p.expectAndConsume(",") {
 			return nil
 		}
 	}
@@ -66,15 +56,14 @@ func (p *Parser) parseParameterList() []*Param {
 func (p *Parser) parseParameter() *Param {
 	paramType := p.parseType()
 	if paramType == nil {
-		p.errorf("expected parameter type")
+		p.errorf("expected parameter type, got %q", p.cur.Lexeme)
 		return nil
 	}
 
 	if p.cur.Type != lexer.IDENT {
-		p.errorf("expected parameter name")
+		p.errorf("expected parameter name, got %q", p.cur.Lexeme)
 		return nil
 	}
-
 	paramName := p.cur.Lexeme
 	p.advanceToken()
 
@@ -85,9 +74,9 @@ func (p *Parser) parseParameter() *Param {
 }
 
 func (p *Parser) parseFunctionBody() []Stmt {
-	body := p.parseBlockLike()
-	if body == nil {
-		p.errorf("expected function body")
+	if p.cur.Lexeme != "{" {
+		p.errorf("expected '{' for function body")
+		return nil
 	}
-	return body
+	return p.parseBlock()
 }

@@ -9,8 +9,6 @@ func isDigit(ch byte) bool {
 }
 
 func unescapeStringBytes(b []byte) string {
-	// Implementação simples - remove escapes básicos
-	// Você pode expandir isso conforme necessário
 	var result []byte
 	escaped := false
 

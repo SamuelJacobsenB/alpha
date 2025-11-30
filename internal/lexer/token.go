@@ -12,9 +12,9 @@ const (
 	FLOAT
 	STRING
 	OP
+	GENERIC // T, U, etc. (parâmetros genéricos)
 )
 
-// Token representa um token emitido pelo lexer
 type Token struct {
 	Type   TokenType
 	Lexeme string // texto bruto
@@ -23,7 +23,6 @@ type Token struct {
 	Col    int
 }
 
-// keywords simples
 var keywords = map[string]struct{}{
 	// Tipos primitivos
 	"int": {}, "string": {}, "float": {}, "boolean": {}, "void": {},
@@ -33,7 +32,7 @@ var keywords = map[string]struct{}{
 	"var": {}, "const": {}, "function": {}, "class": {}, "type": {}, "enum": {},
 
 	// Controle de fluxo
-	"if": {}, "else": {}, "while": {}, "for": {}, "in": {}, "return": {},
+	"if": {}, "else": {}, "while": {}, "do": {}, "for": {}, "in": {}, "return": {},
 	"break": {}, "continue": {}, "switch": {}, "case": {}, "default": {},
 
 	// Valores

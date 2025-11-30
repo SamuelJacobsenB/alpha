@@ -16,90 +16,41 @@ type Parser struct {
 
 func New(sc *lexer.Scanner) *Parser {
 	p := &Parser{sc: sc, Errors: []string{}}
-	p.cur = p.sc.NextToken()
-	p.nxt = p.sc.NextToken()
+	p.advanceToken()
+	p.advanceToken()
 	return p
 }
 
 func (p *Parser) advanceToken() {
-	if p.cur.Type == lexer.EOF {
-		return
-	}
-
 	p.cur = p.nxt
 	p.nxt = p.sc.NextToken()
-	fmt.Printf("advanceToken: %q -> %q (nxt=%q)\n", p.cur.Lexeme, p.nxt.Lexeme, p.nxt.Lexeme)
 }
 
-func (p *Parser) curType() lexer.TokenType  { return p.cur.Type }
-func (p *Parser) peekType() lexer.TokenType { return p.nxt.Type }
-
-func (p *Parser) expectLexeme(lex string) bool {
-	if p.nxt.Lexeme == lex {
-		p.advanceToken()
-		return true
-	}
-	p.errorf("expected %q, found %q at %d:%d", lex, p.nxt.Lexeme, p.nxt.Line, p.nxt.Col)
-	return false
-}
-
-func (p *Parser) errorf(format string, a ...interface{}) {
-	p.Errors = append(p.Errors, fmt.Sprintf(format, a...))
+func (p *Parser) errorf(format string, args ...interface{}) {
+	p.Errors = append(p.Errors, fmt.Sprintf(format, args...))
 }
 
 func (p *Parser) ParseProgram() *Program {
-	prog := &Program{Body: []Stmt{}}
+	body := make([]Stmt, 0, 10)
 
-	for p.curType() != lexer.EOF && p.cur.Lexeme != "" {
-		fmt.Printf("=== Iteração %d: cur=%q nxt=%q ===\n", len(prog.Body), p.cur.Lexeme, p.nxt.Lexeme)
-
-		previousToken := p.cur.Lexeme
-
-		stmt := p.parseTopLevel()
-		if stmt != nil {
-			prog.Body = append(prog.Body, stmt)
-			fmt.Printf("=== Adicionado: %T ===\n", stmt)
-		}
-
-		if stmt == nil && p.cur.Lexeme == previousToken && p.curType() != lexer.EOF {
-			fmt.Printf("=== Token preso em %q, avançando manualmente ===\n", p.cur.Lexeme)
+	for p.cur.Type != lexer.EOF {
+		if stmt := p.parseTopLevel(); stmt != nil {
+			body = append(body, stmt)
+		} else {
 			p.advanceToken()
 		}
-
-		if p.curType() == lexer.EOF {
-			break
-		}
 	}
 
-	fmt.Printf("=== Programa completo com %d statements ===\n", len(prog.Body))
-	return prog
-}
-
-func (p *Parser) isAtStatementBoundary() bool {
-	if p.cur.Type == lexer.KEYWORD {
-		switch p.cur.Lexeme {
-		case "var", "const", "if", "while", "for", "return":
-			return true
-		}
-
-		if isTypeKeyword(p.cur.Lexeme) {
-			return true
-		}
-	}
-
-	if p.cur.Lexeme == "}" {
-		return true
-	}
-
-	return false
+	return &Program{Body: body}
 }
 
 func (p *Parser) parseNumberToken(tok lexer.Token) Expr {
 	if tok.Type == lexer.INT {
 		v, _ := strconv.ParseInt(tok.Value, 10, 64)
+		p.advanceToken()
 		return &IntLiteral{Value: v}
 	}
-
 	f, _ := strconv.ParseFloat(tok.Value, 64)
+	p.advanceToken()
 	return &FloatLiteral{Value: f}
 }

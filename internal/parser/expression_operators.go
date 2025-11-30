@@ -7,9 +7,13 @@ func (p *Parser) parseOperatorExpression() Expr {
 	case "(":
 		return p.parseParenthesizedExpression()
 	case "{":
-		return p.parseArrayLiteral()
+		return p.parseMapLiteral()
 	default:
-		return p.handleUnknownOperator()
+		if p.cur.Lexeme == "{" {
+			return nil
+		}
+		p.errorf("unexpected operator %q at start of expression", p.cur.Lexeme)
+		return nil
 	}
 }
 
@@ -39,14 +43,4 @@ func (p *Parser) parseParenthesizedExpression() Expr {
 	}
 
 	return expr
-}
-
-func (p *Parser) handleUnknownOperator() Expr {
-	if p.cur.Lexeme == "{" {
-		return nil
-	}
-
-	p.errorf("unexpected operator %q at start of expression at %d:%d",
-		p.cur.Lexeme, p.cur.Line, p.cur.Col)
-	return nil
 }

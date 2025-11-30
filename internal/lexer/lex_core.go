@@ -1,12 +1,12 @@
 package lexer
 
-// NextToken: loop principal, pula espaços/comentários e escolhe o lexador
 func (s *Scanner) NextToken() Token {
 	for {
 		s.skipSpaceAndComments()
 		if s.isEOF() {
 			return Token{Type: EOF, Lexeme: "", Line: s.line, Col: s.col}
 		}
+
 		// marcar início do token e guardar posição humana
 		s.start = s.index
 		s.tokenLine = s.line

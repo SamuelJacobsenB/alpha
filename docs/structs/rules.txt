@@ -1,0 +1,20 @@
+- Tipos:
+byte, char, string, int, float, double, boolean, error, component, void, null
+
+-----------------------------------------------------------
+
+- Pacotes Nativos:
+http, websocket, router,
+json, console, strings, 
+math, time, validators, 
+crypto, errors, html, 
+os, env, sql
+
+-----------------------------------------------------------
+
+- Observações:
+Linguagem inclui ponteiros
+Erros são variáveis do tipo error
+Linguagem é compilada e roda em Go
+Operadores lógicos semelhantes aos de Javascript
+; opicional (na maioria dos casos)

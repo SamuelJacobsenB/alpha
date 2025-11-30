@@ -1,32 +1,16 @@
 package parser
 
-import (
-	"fmt"
+import "github.com/alpha/internal/lexer"
 
-	"github.com/alpha/internal/lexer"
-)
-
-func (p *Parser) parseKeywordStatement() Stmt {
+func (p *Parser) parseControlStmt() Stmt {
 	switch p.cur.Lexeme {
-	case "var":
-		fmt.Println("parseTopLevel: detected VAR")
-		return p.parseVarDecl()
-	case "const":
-		fmt.Println("parseTopLevel: detected CONST")
-		return p.parseConstDecl()
-	case "function":
-		return p.handleTopLevelFunction()
 	case "if":
-		fmt.Println("parseTopLevel: detected IF")
 		return p.parseIf()
 	case "while":
-		fmt.Println("parseTopLevel: detected WHILE")
 		return p.parseWhile()
 	case "for":
-		fmt.Println("parseTopLevel: detected FOR")
 		return p.parseFor()
 	case "return":
-		fmt.Println("parseTopLevel: detected RETURN")
 		return p.parseReturn()
 	default:
 		p.advanceToken()
@@ -34,14 +18,8 @@ func (p *Parser) parseKeywordStatement() Stmt {
 	}
 }
 
-func (p *Parser) handleTopLevelFunction() Stmt {
-	p.errorf("anonymous functions are not allowed at top level")
-	p.advanceToken() // skip 'function'
-	return nil
-}
-
 func (p *Parser) parseIf() Stmt {
-	p.advanceToken() // consume 'if'
+	p.advanceToken()
 
 	cond := p.parseCondition()
 	if cond == nil {
@@ -55,55 +33,43 @@ func (p *Parser) parseIf() Stmt {
 }
 
 func (p *Parser) parseWhile() Stmt {
-	p.advanceToken() // consume 'while'
+	p.advanceToken()
 
 	cond := p.parseCondition()
-	body := p.parseBlockLike()
+	if cond == nil {
+		return nil
+	}
 
-	return &WhileStmt{Cond: cond, Body: body}
+	return &WhileStmt{Cond: cond, Body: p.parseBlockLike()}
 }
 
 func (p *Parser) parseFor() Stmt {
-	fmt.Printf("parseFor: starting, cur=%q nxt=%q\n", p.cur.Lexeme, p.nxt.Lexeme)
+	p.advanceToken()
 
 	if p.isForInLoop() {
-		fmt.Println("parseFor: detected for...in loop")
 		return p.parseForIn()
 	}
-
-	fmt.Println("parseFor: detected traditional for loop")
 	return p.parseForTraditional()
 }
 
 func (p *Parser) parseReturn() Stmt {
-	p.advanceToken() // consume 'return'
+	p.advanceToken()
 
 	if p.isAtEndOfStatement() {
 		return &ReturnStmt{Value: nil}
 	}
 
-	value := p.parseExpression(LOWEST)
-	return &ReturnStmt{Value: value}
+	return &ReturnStmt{Value: p.parseExpression(LOWEST)}
 }
 
-// Helper functions
 func (p *Parser) parseCondition() Expr {
-	hasParen := p.cur.Lexeme == "("
-	if hasParen {
-		p.advanceToken() // consume '('
-	}
-
-	cond := p.parseExpression(LOWEST)
-	if cond == nil {
-		p.errorf("invalid condition")
+	if !p.expectAndConsume("(") {
 		return nil
 	}
 
-	if hasParen {
-		if !p.expectAndConsume(")") {
-			p.errorf("expected ')' after condition")
-			return nil
-		}
+	cond := p.parseExpression(LOWEST)
+	if !p.expectAndConsume(")") {
+		return nil
 	}
 
 	return cond
@@ -117,37 +83,8 @@ func (p *Parser) parseOptionalElse() []Stmt {
 	return nil
 }
 
-func (p *Parser) isForInLoop() bool {
-	if p.nxt.Lexeme != "(" {
-		return false
-	}
-
-	saveCur := p.cur
-	saveNxt := p.nxt
-
-	p.advanceToken() // cur = "("
-	p.advanceToken() // cur = primeiro token dentro dos parênteses
-
-	isForIn := false
-	steps := 0
-
-	for steps < 5 && p.cur.Type != lexer.EOF && p.cur.Lexeme != ")" {
-		if p.cur.Lexeme == "in" {
-			isForIn = true
-			break
-		}
-		p.advanceToken()
-		steps++
-	}
-
-	p.cur = saveCur
-	p.nxt = saveNxt
-
-	return isForIn
-}
-
 func (p *Parser) isAtEndOfStatement() bool {
-	return p.cur.Type == lexer.EOF || p.cur.Lexeme == "}" || p.cur.Lexeme == ";"
+	return p.cur.Lexeme == ";" || p.cur.Lexeme == "}" || p.cur.Type == lexer.EOF
 }
 
 func (p *Parser) expectAndConsume(expected string) bool {
@@ -155,5 +92,6 @@ func (p *Parser) expectAndConsume(expected string) bool {
 		p.advanceToken()
 		return true
 	}
+	p.errorf("expected '%s', got '%s'", expected, p.cur.Lexeme)
 	return false
 }

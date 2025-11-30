@@ -1,126 +1,133 @@
 package parser
 
-import (
-	"fmt"
+import "github.com/alpha/internal/lexer"
 
-	"github.com/alpha/internal/lexer"
-)
+var typeKeywords = map[string]bool{
+	"int": true, "string": true, "float": true, "bool": true,
+	"void": true, "byte": true, "char": true, "error": true,
+	"set": true, "map": true,
+}
+
+func isTypeKeyword(lex string) bool {
+	return typeKeywords[lex]
+}
 
 func (p *Parser) parseType() Type {
-	fmt.Printf("parseType: cur=%q\n", p.cur.Lexeme)
-
-	// Verificar se é um tipo primitivo
-	if p.cur.Type == lexer.KEYWORD && isTypeKeyword(p.cur.Lexeme) {
-		return p.parsePrimitiveOrArrayType()
-	}
-
-	// CORREÇÃO: Não tentar parsear 'function' como tipo
-	if p.cur.Lexeme == "function" {
-		p.errorf("unexpected 'function' keyword in type position")
+	if !isTypeKeyword(p.cur.Lexeme) && p.cur.Type != lexer.IDENT {
 		return nil
 	}
 
-	p.errorf("expected type, got %q", p.cur.Lexeme)
-	return nil
-}
+	var typ Type
 
-func (p *Parser) parsePrimitiveOrArrayType() Type {
-	typeName := p.cur.Lexeme
-	p.advanceToken()
-
-	// Verificar se é array type
-	if p.cur.Lexeme == "[" {
-		return p.parseArrayType(&PrimitiveType{Name: typeName})
+	switch p.cur.Lexeme {
+	case "set":
+		typ = p.parseSetType()
+	case "map":
+		typ = p.parseMapType()
+	default:
+		typ = p.parseBaseType()
 	}
 
-	return &PrimitiveType{Name: typeName}
+	return p.parseTypeModifiers(typ)
+}
+
+func (p *Parser) parseBaseType() Type {
+	name := p.cur.Lexeme
+	p.advanceToken()
+
+	if p.cur.Lexeme == "<" {
+		return p.parseGenericType(name)
+	}
+
+	return &PrimitiveType{Name: name}
+}
+
+func (p *Parser) parseGenericType(base string) Type {
+	p.advanceToken()
+
+	switch base {
+	case "set":
+		elemType := p.parseType()
+		if !p.expectAndConsume(">") {
+			return nil
+		}
+		return &SetType{ElementType: elemType}
+
+	case "map":
+		keyType := p.parseType()
+		if !p.expectAndConsume(",") {
+			return nil
+		}
+		valueType := p.parseType()
+		if !p.expectAndConsume(">") {
+			return nil
+		}
+		return &MapType{KeyType: keyType, ValueType: valueType}
+
+	default:
+		typ := &IdentifierType{Name: base}
+		if !p.expectAndConsume(">") {
+			return nil
+		}
+		return typ
+	}
+}
+
+func (p *Parser) parseSetType() Type {
+	p.advanceToken()
+	if !p.expectAndConsume("<") {
+		return nil
+	}
+	elemType := p.parseType()
+	if !p.expectAndConsume(">") {
+		return nil
+	}
+	return &SetType{ElementType: elemType}
+}
+
+func (p *Parser) parseMapType() Type {
+	p.advanceToken()
+	if !p.expectAndConsume("<") {
+		return nil
+	}
+	keyType := p.parseType()
+	if !p.expectAndConsume(",") {
+		return nil
+	}
+	valueType := p.parseType()
+	if !p.expectAndConsume(">") {
+		return nil
+	}
+	return &MapType{KeyType: keyType, ValueType: valueType}
+}
+
+func (p *Parser) parseTypeModifiers(base Type) Type {
+	current := base
+
+	for {
+		switch p.cur.Lexeme {
+		case "?":
+			current = &NullableType{BaseType: current}
+			p.advanceToken()
+		case "*":
+			current = &PointerType{BaseType: current}
+			p.advanceToken()
+		case "[":
+			current = p.parseArrayType(current)
+		default:
+			return current
+		}
+	}
 }
 
 func (p *Parser) parseArrayType(elementType Type) Type {
-	fmt.Printf("parseArrayType: starting\n")
-	p.advanceToken() // consume '['
-
+	p.advanceToken()
 	var size Expr
 	if p.cur.Lexeme != "]" {
 		size = p.parseExpression(LOWEST)
 	}
-
 	if !p.expectAndConsume("]") {
-		p.errorf("expected ']' in array type")
 		return nil
 	}
-
-	return &ArrayType{
-		ElementType: elementType,
-		Size:        size,
-	}
-}
-
-func (p *Parser) parseArrayLiteral() Expr {
-	fmt.Printf("parseArrayLiteral: starting\n")
-	p.advanceToken() // consume '{'
-
-	elements := p.parseArrayElements()
-	if elements == nil {
-		return nil
-	}
-
-	if !p.expectAndConsume("}") {
-		p.errorf("expected '}' after array literal")
-		return nil
-	}
-
-	return &ArrayLiteral{Elements: elements}
-}
-
-func (p *Parser) parseArrayElements() []Expr {
-	var elements []Expr
-
-	for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
-		elem := p.parseExpression(LOWEST)
-		if elem == nil {
-			return nil
-		}
-		elements = append(elements, elem)
-
-		if p.cur.Lexeme == "," {
-			p.advanceToken()
-		} else if p.cur.Lexeme != "}" {
-			p.errorf("expected ',' or '}' in array literal")
-			return nil
-		}
-	}
-
-	return elements
-}
-
-var TypeKeywords = map[string]bool{
-	"int":       true,
-	"string":    true,
-	"float":     true,
-	"bool":      true,
-	"void":      true,
-	"byte":      true,
-	"char":      true,
-	"double":    true,
-	"boolean":   true,
-	"error":     true,
-	"component": true,
-}
-
-func isTypeKeyword(lex string) bool {
-	typeKeywords := map[string]bool{
-		"int":       true,
-		"string":    true,
-		"float":     true,
-		"bool":      true,
-		"void":      true,
-		"byte":      true,
-		"char":      true,
-		"double":    true,
-		"boolean":   true,
-		"error":     true,
-		"component": true,
-	}
-	return typeKeywords[lex]
+	return &ArrayType{ElementType: elementType, Size: size}
 }

@@ -1,70 +1,41 @@
 package parser
 
-import (
-	"fmt"
+import "github.com/alpha/internal/lexer"
 
-	"github.com/alpha/internal/lexer"
-)
-
-// parseTopLevel é o ponto de entrada principal para parsing de statements
 func (p *Parser) parseTopLevel() Stmt {
-	fmt.Printf("parseTopLevel: cur=%q (type=%v) nxt=%q\n", p.cur.Lexeme, p.cur.Type, p.nxt.Lexeme)
-
-	if p.cur.Type == lexer.EOF {
-		return nil
-	}
-
-	switch {
-	case p.isFunctionDeclaration():
-		return p.parseFunctionDecl()
-	case p.isTypedVariableDeclaration():
-		return p.parseTypedVarDecl()
-	case p.isKeywordStatement():
-		return p.parseKeywordStatement()
-	case p.isBlockStart():
-		return &BlockStmt{Body: p.parseBlockLike()}
-	case p.isBlockEnd():
-		p.advanceToken()
-		return nil
-	case p.canStartExpression():
-		return p.parseExprStmt()
+	switch p.cur.Lexeme {
+	case "var":
+		return p.parseVarDecl() // ⬅️ CHAMA APENAS VAR
+	case "const":
+		return p.parseConstDecl() // ⬅️ CHAMA APENAS CONST
+	case "if", "while", "for", "return":
+		return p.parseControlStmt()
 	default:
-		return p.parseUnknownToken()
+		if isTypeKeyword(p.cur.Lexeme) {
+			if p.nxt.Lexeme == "function" {
+				return p.parseFunctionDecl(false)
+			}
+			return p.parseTypedVarDecl()
+		}
+		return p.parseExprStmt()
 	}
 }
 
-// Helpers para detecção de tipo de statement
-func (p *Parser) isFunctionDeclaration() bool {
-	return p.cur.Type == lexer.KEYWORD && isTypeKeyword(p.cur.Lexeme) &&
-		(p.nxt.Lexeme == "function" || (p.nxt.Lexeme == "[" && p.peekNextAfterBrackets() == "function"))
-}
-
-func (p *Parser) isTypedVariableDeclaration() bool {
-	return p.cur.Type == lexer.KEYWORD && isTypeKeyword(p.cur.Lexeme)
-}
-
-func (p *Parser) isKeywordStatement() bool {
-	return p.cur.Type == lexer.KEYWORD && p.isKnownKeyword()
-}
-
-func (p *Parser) isKnownKeyword() bool {
-	keywords := map[string]bool{
-		"var": true, "const": true, "function": true,
-		"if": true, "while": true, "for": true, "return": true,
+func (p *Parser) parseExprStmt() Stmt {
+	expr := p.parseExpression(LOWEST)
+	if expr == nil {
+		return nil
 	}
-	return keywords[p.cur.Lexeme]
+	return &ExprStmt{Expr: expr}
 }
 
-func (p *Parser) isBlockStart() bool {
-	return p.cur.Lexeme == "{"
+func (p *Parser) syncToNextStmt() {
+	for !p.isAtStmtStart() && p.cur.Type != lexer.EOF {
+		p.advanceToken()
+	}
 }
 
-func (p *Parser) isBlockEnd() bool {
-	return p.cur.Lexeme == "}"
-}
-
-func (p *Parser) parseUnknownToken() Stmt {
-	fmt.Printf("parseTopLevel: unrecognized token %q, advancing\n", p.cur.Lexeme)
-	p.advanceToken()
-	return nil
+func (p *Parser) isAtStmtStart() bool {
+	return p.cur.Lexeme == ";" || p.cur.Lexeme == "}" ||
+		p.cur.Type == lexer.KEYWORD || isTypeKeyword(p.cur.Lexeme)
 }

@@ -1,61 +1,30 @@
 package parser
 
-import (
-	"fmt"
-
-	"github.com/alpha/internal/lexer"
-)
+import "github.com/alpha/internal/lexer"
 
 func (p *Parser) parseBlockLike() []Stmt {
 	if p.cur.Lexeme != "{" {
-		return p.parseSingleStatement()
+		if stmt := p.parseTopLevel(); stmt != nil {
+			return []Stmt{stmt}
+		}
+		return nil
 	}
-
 	return p.parseBlock()
-}
-
-func (p *Parser) parseSingleStatement() []Stmt {
-	stmt := p.parseTopLevel()
-	if stmt != nil {
-		return []Stmt{stmt}
-	}
-	return nil
 }
 
 func (p *Parser) parseBlock() []Stmt {
 	p.advanceToken() // consume '{'
-	fmt.Printf("parseBlock: entered block, cur=%q\n", p.cur.Lexeme)
 
-	var stmts []Stmt
+	stmts := make([]Stmt, 0, 5) // Pre-aloca
 
-	for !p.isBlockEnd() && p.cur.Type != lexer.EOF {
-		stmt := p.parseStatementInBlock()
-		if stmt != nil {
+	for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
+		if stmt := p.parseTopLevel(); stmt != nil {
 			stmts = append(stmts, stmt)
+		} else {
+			p.advanceToken() // Evita loop infinito
 		}
 	}
 
-	if !p.expectAndConsume("}") {
-		p.errorf("expected '}' to close block, got %q", p.cur.Lexeme)
-	}
-
-	fmt.Printf("parseBlock: exited block with %d statements\n", len(stmts))
+	p.expectAndConsume("}")
 	return stmts
-}
-
-func (p *Parser) parseStatementInBlock() Stmt {
-	previousToken := p.cur.Lexeme
-	stmt := p.parseTopLevel()
-
-	// Safety: advance if we're stuck on the same token
-	if stmt == nil && p.cur.Lexeme == previousToken && !p.isBlockEnd() {
-		p.advanceToken()
-	}
-
-	return stmt
-}
-
-func (p *Parser) parseExprStmt() Stmt {
-	ex := p.parseExpression(LOWEST)
-	return &ExprStmt{Expr: ex}
 }

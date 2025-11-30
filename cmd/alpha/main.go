@@ -7,77 +7,65 @@ import (
 	"github.com/alpha/internal/parser"
 )
 
+const source = `
+	int num
+	int num1 = 10
+	var num2 = 20
+	const num3 = 30
+`
+
 func main() {
-	source := `
-        // Função simples
-        int function soma(int a, int b) {
-            return a + b
-        }
-        
-        // Função void
-        void function dizerOla(string nome) {}
-        
-        // Função com genéricos
-        void [T] function processar(T item) {}
-        
-        // Variável com função anônima
-        var funcao = void function() {}
-        
-        // Chamadas de função
-        int resultado = soma(5, 3)
-        dizerOla("Mundo")
-        processar<int>(42)
-        
-        // Função recursiva
-        int function fatorial(int n) {
-            if (n <= 1) {
-                return 1
-            }
-            return n * fatorial(n - 1)
-        }
-    `
+	fmt.Print(source)
 
-	fmt.Println("=== TESTE SEM LIMITES DA LINGUAGEM ALPHA ===")
+	// Análisis léxico
+	fmt.Println("\n📋 TOKENS:")
+	scanner := lexer.NewScanner(source)
+	for {
+		token := scanner.NextToken()
+		fmt.Printf("%-10s %q\n", tokenTypeName(token.Type), token.Lexeme)
 
-	sc := lexer.NewScanner(source)
-	pr := parser.New(sc)
-	ast := pr.ParseProgram()
-
-	if pr.HasErrors() {
-		fmt.Println("ERROS ENCONTRADOS:")
-		fmt.Println(pr.ErrorsText())
-	} else {
-		fmt.Printf("✅ Análise concluída com sucesso! %d statements\n\n", len(ast.Body))
-
-		for i, stmt := range ast.Body {
-			fmt.Printf("%d. %T\n", i+1, stmt)
-
-			switch s := stmt.(type) {
-			case *parser.FunctionDecl:
-				fmt.Printf("   FUNÇÃO: %s", s.Name)
-				if len(s.Generics) > 0 {
-					fmt.Printf(" [%d genéricos]", len(s.Generics))
-				}
-				fmt.Printf(" -> %d parâmetros, %d statements\n", len(s.Params), len(s.Body))
-
-			case *parser.VarDecl:
-				fmt.Printf("   VAR: %s", s.Name)
-				if s.Init != nil {
-					if _, ok := s.Init.(*parser.FunctionExpr); ok {
-						fmt.Printf(" = função anônima")
-					}
-				}
-				fmt.Println()
-
-			case *parser.ExprStmt:
-				if call, ok := s.Expr.(*parser.CallExpr); ok {
-					fmt.Printf("   CHAMADA: ")
-					if ident, ok := call.Callee.(*parser.Identifier); ok {
-						fmt.Printf("%s", ident.Name)
-					}
-					fmt.Printf("(%d args)\n", len(call.Args))
-				}
-			}
+		if token.Type == lexer.EOF || token.Type == lexer.ERROR {
+			break
 		}
+	}
+
+	// Análisis sintáctico
+	fmt.Println("\n🌳 ÁRBOL SINTÁCTICO:")
+	parser := parser.New(lexer.NewScanner(source))
+	ast := parser.ParseProgram()
+
+	if parser.HasErrors() {
+		fmt.Println("❌ Errores de parsing:")
+		for _, err := range parser.Errors {
+			fmt.Println(" -", err)
+		}
+	} else {
+		fmt.Printf("✅ Programa analizado correctamente\n")
+		fmt.Printf("   %d declaraciones encontradas\n", len(ast.Body))
+	}
+}
+
+func tokenTypeName(t lexer.TokenType) string {
+	switch t {
+	case lexer.EOF:
+		return "EOF"
+	case lexer.ERROR:
+		return "ERROR"
+	case lexer.KEYWORD:
+		return "KEYWORD"
+	case lexer.IDENT:
+		return "IDENT"
+	case lexer.INT:
+		return "INT"
+	case lexer.FLOAT:
+		return "FLOAT"
+	case lexer.STRING:
+		return "STRING"
+	case lexer.OP:
+		return "OPERADOR"
+	case lexer.GENERIC:
+		return "GENÉRICO"
+	default:
+		return "DESCONOCIDO"
 	}
 }

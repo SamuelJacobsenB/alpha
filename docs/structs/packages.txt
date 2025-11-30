@@ -1,0 +1,11 @@
+package main
+
+import alpha.math // ou import math from alpha, alpha é para pacotes nativos
+import users, getUsers as get from user
+
+void function processar() {
+    get()
+    var a = math.sqrt(16)
+}
+
+export processar

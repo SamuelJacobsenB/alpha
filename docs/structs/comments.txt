@@ -1,0 +1,7 @@
+// I am a comment in a linked
+
+/*
+    I am a comment
+    in lots of
+    lines
+*/

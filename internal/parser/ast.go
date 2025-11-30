@@ -16,6 +16,13 @@ type PrimitiveType struct {
 
 func (*PrimitiveType) typeNode() {}
 
+// IdentifierType representa um tipo referenciado por identificador (ex: T em genéricos)
+type IdentifierType struct {
+	Name string
+}
+
+func (*IdentifierType) typeNode() {}
+
 // ArrayType representa um tipo de array
 type ArrayType struct {
 	ElementType Type
@@ -64,6 +71,14 @@ type WhileStmt struct {
 }
 
 func (w *WhileStmt) stmtNode() {}
+
+// DoWhileStmt representa do { ... } while (cond)
+type DoWhileStmt struct {
+	Body []Stmt
+	Cond Expr
+}
+
+func (d *DoWhileStmt) stmtNode() {}
 
 type ForStmt struct {
 	Init Stmt // pode ser nil
@@ -214,3 +229,66 @@ type IndexExpr struct {
 }
 
 func (i *IndexExpr) exprNode() {}
+
+// NullableType representa tipos anuláveis como int?
+type NullableType struct {
+	BaseType Type
+}
+
+func (*NullableType) typeNode() {}
+
+// PointerType representa tipos ponteiro como int*
+type PointerType struct {
+	BaseType Type
+}
+
+func (*PointerType) typeNode() {}
+
+// SetType representa set<int>
+type SetType struct {
+	ElementType Type
+}
+
+func (*SetType) typeNode() {}
+
+// MapType representa map<int, string>
+type MapType struct {
+	KeyType   Type
+	ValueType Type
+}
+
+func (*MapType) typeNode() {}
+
+// UnionType representa string | float
+type UnionType struct {
+	Types []Type
+}
+
+func (*UnionType) typeNode() {}
+
+// SetLiteral representa [1, 2, 4] para sets
+type SetLiteral struct {
+	Elements []Expr
+}
+
+func (*SetLiteral) exprNode() {}
+
+// MapLiteral representa {1: "Hello", 2: "Bye"}
+type MapLiteral struct {
+	Entries []*MapEntry
+}
+
+func (*MapLiteral) exprNode() {}
+
+// MapEntry representa uma entrada key:value no mapa
+type MapEntry struct {
+	Key   Expr
+	Value Expr
+}
+
+// ReferenceExpr representa &hello
+type ReferenceExpr struct {
+	Expr Expr
+}
+
+func (*ReferenceExpr) exprNode() {}

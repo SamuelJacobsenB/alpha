@@ -1,76 +1,68 @@
 package parser
 
 import (
-	"fmt"
-
 	"github.com/alpha/internal/lexer"
 )
 
 func (p *Parser) parseGenericParams() []*GenericParam {
-	fmt.Printf("parseGenericParams: starting at %q\n", p.cur.Lexeme)
-	p.advanceToken() // consume '['
-
+	if !p.expectAndConsume("<") {
+		return nil
+	}
 	var generics []*GenericParam
-
-	for p.cur.Lexeme != "]" && p.cur.Type != lexer.EOF {
-		generic := p.parseGenericParam()
-		if generic == nil {
-			break
-		}
-		generics = append(generics, generic)
-
-		if !p.consumeOptionalComma() {
-			break
+	for p.cur.Type == lexer.GENERIC {
+		generics = append(generics, &GenericParam{Name: p.cur.Lexeme})
+		p.advanceToken()
+		if p.cur.Lexeme == "," {
+			p.advanceToken()
+		} else if p.cur.Lexeme != ">" {
+			p.errorf("expected ',' or '>'")
+			return nil
 		}
 	}
-
-	if !p.expectAndConsume("]") {
-		p.errorf("expected ']' after generic parameters")
+	if !p.expectAndConsume(">") {
+		return nil
 	}
-
-	fmt.Printf("parseGenericParams: found %d generic parameters\n", len(generics))
 	return generics
 }
 
-func (p *Parser) parseGenericParam() *GenericParam {
-	if p.cur.Type != lexer.IDENT {
-		p.errorf("expected generic parameter name, got %q", p.cur.Lexeme)
-		return nil
-	}
+func (p *Parser) isGenericCall() bool {
+	save := p.cur
+	defer func() { p.cur = save }()
 
-	generic := &GenericParam{Name: p.cur.Lexeme}
+	if p.cur.Lexeme != "<" {
+		return false
+	}
 	p.advanceToken()
-	return generic
-}
-
-func (p *Parser) consumeOptionalComma() bool {
-	if p.cur.Lexeme == "," {
-		p.advanceToken()
-		return true
+	if !isTypeKeyword(p.cur.Lexeme) && p.cur.Type != lexer.IDENT {
+		return false
 	}
-	return false
+	for p.cur.Lexeme != ">" && p.cur.Type != lexer.EOF {
+		p.advanceToken()
+	}
+	if p.cur.Lexeme != ">" {
+		return false
+	}
+	p.advanceToken()
+	return p.cur.Lexeme == "("
 }
 
 func (p *Parser) parseGenericCall(left Expr) Expr {
-	fmt.Printf("parseGenericCall: starting with left=%T\n", left)
-	p.advanceToken() // consume '<'
-
+	p.advanceToken()
 	typeArgs := p.parseTypeArguments()
 	if typeArgs == nil {
 		return nil
 	}
-
 	if !p.expectAndConsume(">") {
-		p.errorf("expected '>' to close generic arguments")
 		return nil
 	}
-
-	// Se houver parênteses, é uma chamada de função genérica
-	if p.cur.Lexeme == "(" {
-		return p.parseGenericFunctionCall(left, typeArgs)
+	if p.cur.Lexeme != "(" {
+		p.errorf("expected '(' after generic arguments")
+		return nil
 	}
-
-	// Caso contrário, é uma especialização genérica
+	call := p.parseCall(left)
+	if call == nil {
+		return nil
+	}
 	return &GenericSpecialization{
 		Callee:   left,
 		TypeArgs: typeArgs,
@@ -79,31 +71,17 @@ func (p *Parser) parseGenericCall(left Expr) Expr {
 
 func (p *Parser) parseTypeArguments() []Type {
 	var typeArgs []Type
-
-	for p.cur.Lexeme != ">" && p.cur.Type != lexer.EOF {
+	for {
 		typ := p.parseType()
-		if typ != nil {
-			typeArgs = append(typeArgs, typ)
+		if typ == nil {
+			return nil
+		}
+		typeArgs = append(typeArgs, typ)
+		if p.cur.Lexeme == "," {
+			p.advanceToken()
 		} else {
-			p.errorf("expected type in generic arguments")
-			break
-		}
-
-		if !p.consumeOptionalComma() {
 			break
 		}
 	}
-
 	return typeArgs
-}
-
-func (p *Parser) parseGenericFunctionCall(left Expr, typeArgs []Type) Expr {
-	// Primeiro criar a especialização genérica
-	specialization := &GenericSpecialization{
-		Callee:   left,
-		TypeArgs: typeArgs,
-	}
-
-	// Depois parsear a chamada de função normal
-	return p.parseCallExpression(specialization)
 }

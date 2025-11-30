@@ -25,8 +25,8 @@ var precedences = map[string]int{
 	"&&": LOGICALAND,
 	"==": EQUALITY,
 	"!=": EQUALITY,
-	"<":  COMPARISON,
-	">":  COMPARISON,
+	"<":  COMPARISON, // Usado para comparação, NÃO para genéricos
+	">":  COMPARISON, // Usado para comparação, NÃO para genéricos
 	"<=": COMPARISON,
 	">=": COMPARISON,
 	"+":  SUM,

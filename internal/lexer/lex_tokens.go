@@ -10,11 +10,18 @@ func (s *Scanner) lexIdentifier() Token {
 		break
 	}
 
-	tok := s.emit(IDENT)
-	if _, ok := keywords[tok.Lexeme]; ok {
-		tok.Type = KEYWORD
+	lex := string(s.src[s.start:s.index])
+
+	if _, ok := keywords[lex]; ok {
+		return s.emit(KEYWORD)
 	}
-	return tok
+
+	// DETECÇÃO DE PARÂMETROS GENÉRICOS (T, U, etc.)
+	if len(lex) == 1 && lex[0] >= 'A' && lex[0] <= 'Z' {
+		return s.emit(GENERIC)
+	}
+
+	return s.emit(IDENT)
 }
 
 // lexNumber reconhece INT e FLOAT (suporte básico a expoente)
@@ -61,6 +68,7 @@ func (s *Scanner) lexNumber() Token {
 		return s.emit(FLOAT)
 	}
 
+	// CORREÇÃO: Garantir que o scanner avançou completamente sobre o número
 	return s.emit(INT)
 }
 
@@ -90,42 +98,32 @@ func (s *Scanner) lexString() Token {
 	return s.errorToken("unterminated string")
 }
 
-// lexOperator reconhece operadores 2-char ou fallback 1-char
 func (s *Scanner) lexOperator() Token {
 	ch := s.peek(0)
 	ch1 := s.peek(1)
 
-	// Casos para colchetes (já existe, mas vamos manter)
-	if ch == '[' || ch == ']' {
-		s.advance()
-		return s.emit(OP)
-	}
-
-	// Casos para parênteses e chaves
-	if ch == '(' || ch == ')' || ch == '{' || ch == '}' {
-		s.advance()
-		return s.emit(OP)
-	}
-
-	// Operadores de 2 caracteres
+	// Operadores de 2 caracteres - VERIFICAR PRIMEIRO
 	twoCharOps := map[string]bool{
 		"==": true, "!=": true, "<=": true, ">=": true,
 		"&&": true, "||": true, "++": true, "--": true,
 		"+=": true, "-=": true, "*=": true, "/=": true,
 	}
 
-	if twoCharOps[string(ch)+string(ch1)] {
+	twoChar := string(ch) + string(ch1)
+	if twoCharOps[twoChar] {
 		s.advance()
 		s.advance()
 		return s.emit(OP)
 	}
 
-	// Operadores de 1 caractere
+	// Operadores de 1 caractere - SIMPLIFICADO
 	oneCharOps := map[byte]bool{
 		'+': true, '-': true, '*': true, '/': true,
-		'%': true, '<': true, '>': true, '=': true,
-		'!': true, '&': true, '|': true, ';': true,
-		',': true, '.': true, ':': true,
+		'%': true, '=': true, '!': true, '&': true,
+		'|': true, ';': true, ',': true, '.': true,
+		':': true, '(': true, ')': true, '{': true,
+		'}': true, '[': true, ']': true, '<': true,
+		'>': true,
 	}
 
 	if oneCharOps[ch] {
@@ -133,7 +131,7 @@ func (s *Scanner) lexOperator() Token {
 		return s.emit(OP)
 	}
 
-	// Operador não reconhecido
+	// Se chegou aqui, é um operador não reconhecido
 	s.advance()
 	return s.errorToken("operador não reconhecido: " + string(ch))
 }
