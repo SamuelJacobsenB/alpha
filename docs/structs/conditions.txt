@@ -18,7 +18,7 @@ if(typeof(a) == int) {
     sum -= 2
 }
 
-swith(sum) {
+switch(sum) {
     case 1:
         sum++
     case 2:

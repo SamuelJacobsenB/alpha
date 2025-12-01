@@ -3,6 +3,7 @@ package parser
 const (
 	_ int = iota
 	LOWEST
+	TERNARY    // ? :
 	ASSIGNMENT // = += -= etc.
 	LOGICALOR  // ||
 	LOGICALAND // &&
@@ -10,13 +11,15 @@ const (
 	COMPARISON // < > <= >=
 	SUM        // + -
 	PRODUCT    // * / %
-	PREFIX     // -X !X ++X --X
+	PREFIX     // -X !X ++X --X &X
 	CALL       // func(...)
+	MEMBER     // obj.member
 	INDEX      // [] - acesso a array
 	POSTFIX    // X++ X--
 )
 
 var precedences = map[string]int{
+	"?":  TERNARY,
 	"=":  ASSIGNMENT,
 	"+=": ASSIGNMENT,
 	"-=": ASSIGNMENT,
@@ -36,7 +39,8 @@ var precedences = map[string]int{
 	"/":  PRODUCT,
 	"%":  PRODUCT,
 	"(":  CALL,
+	".":  MEMBER,
 	"[":  INDEX,
-	"++": POSTFIX, // ⬅️ ADICIONADO
-	"--": POSTFIX, // ⬅️ ADICIONADO
+	"++": POSTFIX,
+	"--": POSTFIX,
 }

@@ -39,8 +39,11 @@ var keywords = map[string]struct{}{
 	"true": {}, "false": {}, "null": {},
 
 	// Módulos
-	"import": {}, "export": {}, "package": {},
+	"import": {}, "export": {}, "package": {}, "from": {}, "as": {},
 
 	// OOP
-	"constructor": {},
+	"constructor": {}, "method": {}, "this": {}, "new": {},
+
+	// Outros
+	"typeof": {},
 }

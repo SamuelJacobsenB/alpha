@@ -3,22 +3,48 @@ package parser
 import "github.com/alpha/internal/lexer"
 
 func (p *Parser) parseTopLevel() Stmt {
+	// Ignorar semicolons soltos no início
+	for p.cur.Lexeme == ";" {
+		p.advanceToken()
+	}
+
+	if p.cur.Type == lexer.EOF {
+		return nil
+	}
+
+	var stmt Stmt
+
 	switch p.cur.Lexeme {
 	case "var":
-		return p.parseVarDecl()
+		stmt = p.parseVarDecl()
 	case "const":
-		return p.parseConstDecl()
-	case "if", "while", "do", "for", "return":
+		stmt = p.parseConstDecl()
+	case "class":
+		return p.parseClass()
+	case "type":
+		return p.parseTypeDecl()
+	case "if", "while", "do", "for", "switch", "return":
 		return p.parseControlStmt()
 	default:
 		if isTypeKeyword(p.cur.Lexeme) {
 			if p.nxt.Lexeme == "function" {
 				return p.parseFunctionDecl(false)
+			} else if p.nxt.Type == lexer.IDENT || p.nxt.Lexeme == ";" || p.nxt.Lexeme == "=" {
+				// Pode ser declaração de variável com ou sem inicialização
+				stmt = p.parseTypedVarDecl()
+			} else {
+				p.errorf("unexpected type keyword: %s", p.cur.Lexeme)
+				return nil
 			}
-			return p.parseTypedVarDecl()
+		} else {
+			stmt = p.parseExprStmt()
 		}
-		return p.parseExprStmt()
 	}
+
+	if p.cur.Lexeme == ";" {
+		p.advanceToken()
+	}
+	return stmt
 }
 
 func (p *Parser) parseExprStmt() Stmt {

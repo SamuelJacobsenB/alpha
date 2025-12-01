@@ -12,17 +12,26 @@ func (p *Parser) parseExpression(precedence int) Expr {
 
 	for {
 		curOp := p.cur.Lexeme
-		curPrec := p.precedenceOf(curOp)
 
-		if curPrec < precedence {
-			return left
+		if curOp == "?" {
+			if TERNARY < precedence {
+				return left
+			}
+			left = p.parseTernary(left)
+			continue
 		}
+
+		curPrec := p.precedenceOf(curOp)
 
 		switch {
 		case curOp == "(":
 			left = p.parseCall(left)
 		case curOp == "[":
 			left = p.parseIndex(left)
+		case curOp == ".":
+			left = p.parseMemberAccess(left)
+		case curOp == "?":
+			left = p.parseTernary(left)
 		case p.isInfixOperator(p.cur):
 			left = p.parseInfix(left, curPrec)
 		case curOp == "<" && p.isGenericCall():
@@ -71,6 +80,11 @@ func (p *Parser) parseKeywordExpr() Expr {
 	case "null":
 		p.advanceToken()
 		return &NullLiteral{}
+	case "new":
+		return p.parseNewExpr()
+	case "this":
+		p.advanceToken()
+		return &ThisExpr{}
 	default:
 		if isTypeKeyword(p.cur.Lexeme) && p.nxt.Lexeme == "function" {
 			return p.parseFunctionExpr()
@@ -87,6 +101,10 @@ func (p *Parser) parseOperatorExpr() Expr {
 	case "&":
 		return p.parseReferenceExpr()
 	case "{":
+		// Pode ser map literal ou struct literal
+		if p.isStructLiteral() {
+			return p.parseStructLiteral()
+		}
 		return p.parseMapLiteral()
 	case "[":
 		return p.parseArrayLiteral()

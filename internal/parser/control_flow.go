@@ -12,6 +12,8 @@ func (p *Parser) parseControlStmt() Stmt {
 		return p.parseDoWhile()
 	case "for":
 		return p.parseFor()
+	case "switch":
+		return p.parseSwitch()
 	case "return":
 		return p.parseReturn()
 	default:
@@ -80,10 +82,13 @@ func (p *Parser) parseReturn() Stmt {
 	p.advanceToken()
 
 	if p.isAtEndOfStatement() {
+		p.consumeOptionalSemicolon()
 		return &ReturnStmt{Value: nil}
 	}
 
-	return &ReturnStmt{Value: p.parseExpression(LOWEST)}
+	stmt := &ReturnStmt{Value: p.parseExpression(LOWEST)}
+	p.consumeOptionalSemicolon()
+	return stmt
 }
 
 func (p *Parser) parseCondition() Expr {
@@ -116,7 +121,7 @@ func (p *Parser) parseOptionalElse() []Stmt {
 }
 
 func (p *Parser) isAtEndOfStatement() bool {
-	return p.cur.Lexeme == ";" || p.cur.Lexeme == "}" || p.cur.Type == lexer.EOF
+	return p.cur.Lexeme == ";" || p.cur.Lexeme == "}" || p.cur.Type == lexer.EOF || p.cur.Lexeme == ")"
 }
 
 func (p *Parser) expectAndConsume(expected string) bool {

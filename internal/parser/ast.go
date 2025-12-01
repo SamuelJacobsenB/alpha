@@ -98,6 +98,20 @@ type ForInStmt struct {
 
 func (f *ForInStmt) stmtNode() {}
 
+// SwitchStmt representa switch(expr) { case x: ... }
+type SwitchStmt struct {
+	Expr  Expr
+	Cases []*CaseClause
+}
+
+func (s *SwitchStmt) stmtNode() {}
+
+// CaseClause representa case x: ou default:
+type CaseClause struct {
+	Value Expr // nil para default
+	Body  []Stmt
+}
+
 // FunctionDecl representa uma declaração de função
 type FunctionDecl struct {
 	Name       string
@@ -140,13 +154,61 @@ type FunctionExpr struct {
 
 func (f *FunctionExpr) exprNode() {}
 
-// Adicione esta struct no arquivo ast.go se ainda não existir
+// GenericSpecialization representa <int>func()
 type GenericSpecialization struct {
 	Callee   Expr
 	TypeArgs []Type
 }
 
 func (g *GenericSpecialization) exprNode() {}
+
+// ClassDecl representa uma declaração de classe
+type ClassDecl struct {
+	Name        string
+	Generics    []*GenericParam
+	Fields      []*FieldDecl
+	Constructor *ConstructorDecl
+	Methods     []*MethodDecl
+}
+
+func (c *ClassDecl) stmtNode() {}
+
+// FieldDecl representa um campo da classe
+type FieldDecl struct {
+	Name string
+	Type Type
+}
+
+// ConstructorDecl representa o construtor
+type ConstructorDecl struct {
+	Params []*Param
+	Body   []Stmt
+}
+
+// MethodDecl representa um método da classe
+type MethodDecl struct {
+	Name       string
+	Generics   []*GenericParam
+	Params     []*Param
+	ReturnType Type
+	Body       []Stmt
+}
+
+// TypeDecl representa uma declaração de tipo
+type TypeDecl struct {
+	Name     string
+	Generics []*GenericParam
+	Type     Type
+}
+
+func (t *TypeDecl) stmtNode() {}
+
+// StructType representa um tipo struct como { string text; string sender }
+type StructType struct {
+	Fields []*FieldDecl
+}
+
+func (s *StructType) typeNode() {}
 
 type ReturnStmt struct {
 	Value Expr // pode ser nil
@@ -200,6 +262,15 @@ type BinaryExpr struct {
 }
 
 func (b *BinaryExpr) exprNode() {}
+
+// TernaryExpr representa cond ? trueExpr : falseExpr
+type TernaryExpr struct {
+	Cond      Expr
+	TrueExpr  Expr
+	FalseExpr Expr
+}
+
+func (t *TernaryExpr) exprNode() {}
 
 type CallExpr struct {
 	Callee Expr
@@ -292,3 +363,38 @@ type ReferenceExpr struct {
 }
 
 func (*ReferenceExpr) exprNode() {}
+
+// NewExpr representa new User("name", 10)
+type NewExpr struct {
+	TypeName string
+	TypeArgs []Type // Para genéricos: new List<int>()
+	Args     []Expr
+}
+
+func (n *NewExpr) exprNode() {}
+
+// MemberExpr representa user.name ou user.method()
+type MemberExpr struct {
+	Object Expr
+	Member string
+}
+
+func (m *MemberExpr) exprNode() {}
+
+// ThisExpr representa this
+type ThisExpr struct{}
+
+func (t *ThisExpr) exprNode() {}
+
+// StructLiteral representa inicialização de struct: { text: "hi", sender: "Sam" }
+type StructLiteral struct {
+	Fields []*StructField
+}
+
+func (s *StructLiteral) exprNode() {}
+
+// StructField representa field: value
+type StructField struct {
+	Name  string
+	Value Expr
+}

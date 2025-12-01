@@ -7,49 +7,34 @@ import (
 )
 
 func (p *Parser) parseTypedVarDecl() Stmt {
-	fmt.Printf("parseTypedVarDecl: starting with %q\n", p.cur.Lexeme)
-
 	typ := p.parseType()
 	if typ == nil {
 		return nil
 	}
 
-	fmt.Printf("parseTypedVarDecl: parsed type %T, cur=%q\n", typ, p.cur.Lexeme)
-
-	// Verificar se o próximo token é um identificador
 	if p.cur.Type != lexer.IDENT {
-		p.errorf("expected identifier after type at %d:%d", p.cur.Line, p.cur.Col)
+		if p.cur.Lexeme == ";" {
+			return nil
+		}
+
+		p.errorf("expected identifier after type, got '%s' at %d:%d", p.cur.Lexeme, p.cur.Line, p.cur.Col)
 		return nil
 	}
 
 	name := p.cur.Lexeme
 	p.advanceToken()
 
-	// Só tentar parsear inicializador se houver '='
+	// Apenas verificamos a inicialização
 	var init Expr
 	if p.cur.Lexeme == "=" {
 		p.advanceToken()
-		fmt.Printf("parseOptionalInitializer: after '=', cur=%q (type: %v)\n",
-			p.cur.Lexeme, p.cur.Type)
-
-		// Verificar se é um literal de mapa
-		switch p.cur.Lexeme {
-		case "{":
-			fmt.Println("parseOptionalInitializer: detected map literal")
-			init = p.parseMapLiteral()
-		case "[":
-			fmt.Println("parseOptionalInitializer: detected array/set literal")
-			init = p.parseArrayOrSetLiteral()
-		case "&":
-			fmt.Println("parseOptionalInitializer: detected reference expression")
-			init = p.parseReferenceExpr()
-		default:
-			init = p.parseExpression(LOWEST)
-			fmt.Printf("parseOptionalInitializer: parsed expression %T\n", init)
+		init = p.parseExpression(LOWEST)
+		if init == nil {
+			p.errorf("expected expression after '='")
+			return nil
 		}
 	}
 
-	fmt.Printf("parseTypedVarDecl: completed %s %T, cur=%q\n", name, typ, p.cur.Lexeme)
 	return &VarDecl{Name: name, Type: typ, Init: init}
 }
 
@@ -103,8 +88,6 @@ func (p *Parser) parseConstDecl() Stmt {
 func (p *Parser) parseOptionalInitializer() Expr {
 	if p.cur.Lexeme == "=" {
 		p.advanceToken()
-		fmt.Printf("parseOptionalInitializer: after '=', cur=%q (type: %v)\n",
-			p.cur.Lexeme, p.cur.Type)
 
 		// Verificar se é um literal de mapa
 		if p.cur.Lexeme == "{" {

@@ -1,6 +1,8 @@
 package parser
 
-import "github.com/alpha/internal/lexer"
+import (
+	"github.com/alpha/internal/lexer"
+)
 
 var typeKeywords = map[string]bool{
 	"int": true, "string": true, "float": true, "bool": true,
@@ -65,7 +67,10 @@ func (p *Parser) parseBaseType() Type {
 	p.advanceToken()
 
 	if p.cur.Lexeme == "<" {
-		return p.parseGenericType(name)
+		// Verificar se é realmente um tipo genérico (ex: set<int>, map<int, string>)
+		if isGenericTypeStart(name) {
+			return p.parseGenericType(name)
+		}
 	}
 
 	return &PrimitiveType{Name: name}
@@ -100,6 +105,10 @@ func (p *Parser) parseGenericType(base string) Type {
 		}
 		return typ
 	}
+}
+
+func isGenericTypeStart(name string) bool {
+	return name == "set" || name == "map" || (name[0] >= 'A' && name[0] <= 'Z')
 }
 
 func (p *Parser) parseSetType() Type {

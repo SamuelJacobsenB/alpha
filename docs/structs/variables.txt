@@ -11,7 +11,7 @@ string[2] arr2 = ["Hello", "World"]
 var arr3 = ["Hello", "World"] // string[2] 
 string[] linked
 
-boolean ifLogged = true
+bool ifLogged = true
 
 int hello = 30
 int* helloPointer = &hello

@@ -1,30 +1,44 @@
 package parser
 
-import "github.com/alpha/internal/lexer"
+import (
+	"github.com/alpha/internal/lexer"
+)
 
 func (p *Parser) parseForTraditional() Stmt {
 	if !p.expectAndConsume("(") {
 		return nil
 	}
 
+	// Parse initializer (pode ser nil se começar com ';')
 	var init Stmt
 	if p.cur.Lexeme != ";" {
 		init = p.parseForLoopInitializer()
+		if init == nil && p.cur.Lexeme != ";" {
+			p.errorf("failed to parse for loop initializer")
+			return nil
+		}
 	}
 
+	// Consumir o ';' após o initializer
 	if !p.expectAndConsume(";") {
 		return nil
 	}
 
+	// Parse condition (pode ser nil se começar com ';')
 	var cond Expr
 	if p.cur.Lexeme != ";" {
 		cond = p.parseExpression(LOWEST)
+		if cond == nil {
+			p.errorf("failed to parse for loop condition")
+			return nil
+		}
 	}
 
 	if !p.expectAndConsume(";") {
 		return nil
 	}
 
+	// Parse post statement (pode ser nil se começar com ')')
 	var post Stmt
 	if p.cur.Lexeme != ")" {
 		postExpr := p.parseExpression(LOWEST)
@@ -87,6 +101,11 @@ func (p *Parser) parseForInIdentifiers() (*Identifier, *Identifier) {
 }
 
 func (p *Parser) parseForLoopInitializer() Stmt {
+	// Proteger contra tentar parsear ';' como statement
+	if p.cur.Lexeme == ";" {
+		return nil
+	}
+
 	switch {
 	case p.cur.Lexeme == "var":
 		return p.parseVarDecl()
@@ -97,7 +116,6 @@ func (p *Parser) parseForLoopInitializer() Stmt {
 	}
 }
 
-// CORREÇÃO: Função completamente reescrita
 func (p *Parser) isForInLoop() bool {
 	// Salva o estado atual do parser
 	savedCur := p.cur

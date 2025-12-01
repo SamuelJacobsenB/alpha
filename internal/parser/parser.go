@@ -30,6 +30,12 @@ func (p *Parser) errorf(format string, args ...interface{}) {
 	p.Errors = append(p.Errors, fmt.Sprintf(format, args...))
 }
 
+func (p *Parser) consumeOptionalSemicolon() {
+	if p.cur.Lexeme == ";" {
+		p.advanceToken()
+	}
+}
+
 func (p *Parser) ParseProgram() *Program {
 	body := make([]Stmt, 0, 10)
 
