@@ -140,29 +140,34 @@ func (p *Parser) parseForTraditional() Stmt {
 	var init Stmt
 	if p.cur.Lexeme != ";" {
 		init = p.parseForLoopInitializer()
+		// Se não conseguir parsear o initializer, tenta sincronizar
 		if init == nil && p.cur.Lexeme != ";" {
-			p.errorf("failed to parse for loop initializer")
-			return nil
+			// Avança até encontrar ';' ou ')'
+			for p.cur.Lexeme != ";" && p.cur.Lexeme != ")" && p.cur.Type != lexer.EOF {
+				p.advanceToken()
+			}
 		}
 	}
 
 	// Consumir o ';' após o initializer
 	if !p.expectAndConsume(";") {
-		return nil
+		// Se não encontrar ';', tenta continuar de qualquer forma
+		if p.cur.Lexeme != ")" && p.cur.Type != lexer.EOF {
+			p.advanceToken() // Avança e tenta continuar
+		}
 	}
 
 	// Parse condition (pode ser nil se começar com ';')
 	var cond Expr
 	if p.cur.Lexeme != ";" {
 		cond = p.parseExpression(LOWEST)
-		if cond == nil {
-			p.errorf("failed to parse for loop condition")
-			return nil
-		}
+		// Se falhar, cond será nil, o que é aceitável
 	}
 
 	if !p.expectAndConsume(";") {
-		return nil
+		if p.cur.Lexeme != ")" && p.cur.Type != lexer.EOF {
+			p.advanceToken()
+		}
 	}
 
 	// Parse post statement (pode ser nil se começar com ')')
@@ -175,7 +180,13 @@ func (p *Parser) parseForTraditional() Stmt {
 	}
 
 	if !p.expectAndConsume(")") {
-		return nil
+		// Tenta recuperar procurando o ')'
+		for p.cur.Lexeme != ")" && p.cur.Type != lexer.EOF {
+			p.advanceToken()
+		}
+		if p.cur.Lexeme == ")" {
+			p.advanceToken()
+		}
 	}
 
 	body := p.parseBlockLike()
@@ -233,14 +244,46 @@ func (p *Parser) parseForLoopInitializer() Stmt {
 		return nil
 	}
 
-	switch {
-	case p.cur.Lexeme == "var":
+	// Tenta como declaração com 'var'
+	if p.cur.Lexeme == "var" {
 		return p.parseVarDecl()
-	case isTypeKeyword(p.cur.Lexeme):
-		return p.parseTypedVarDecl()
-	default:
-		return p.parseExprStmt()
 	}
+
+	// Se for uma palavra-chave de tipo, verifica se é uma declaração tipada
+	if isTypeKeyword(p.cur.Lexeme) {
+		// Para determinar se é uma declaração tipada, precisamos ver se há um identificador
+		// após o tipo (considerando possíveis modificadores como [], ?, *)
+		// Fazemos uma análise lookahead sem consumir tokens permanentemente
+
+		// Salva o estado atual
+		savedCur := p.cur
+		savedNxt := p.nxt
+
+		// Tenta parsear o tipo (isso avançará os tokens)
+		typ := p.parseType()
+		if typ == nil {
+			// Se não conseguiu parsear tipo, restaura e tenta como expressão
+			p.cur = savedCur
+			p.nxt = savedNxt
+			return p.parseExprStmt()
+		}
+
+		// Após parsear o tipo, verifica se o token atual é um identificador
+		isTypedDecl := p.cur.Type == lexer.IDENT
+
+		// Restaura o estado
+		p.cur = savedCur
+		p.nxt = savedNxt
+
+		if isTypedDecl {
+			// É uma declaração tipada
+			return p.parseTypedVarDecl()
+		}
+		// Caso contrário, trata como expressão
+	}
+
+	// Por fim, tenta como expressão
+	return p.parseExprStmt()
 }
 
 func (p *Parser) isForInLoop() bool {

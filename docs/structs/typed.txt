@@ -1,7 +1,7 @@
 type Number int | float
 Number num = 5.5
 
-type Message {
+struct Message {
     string text
     string sender
 }
@@ -10,7 +10,7 @@ Message message = {
     sender: "Samuel",
 }
 
-<T> type Car {
+<T> struct Car {
     T motor
     int year
 }

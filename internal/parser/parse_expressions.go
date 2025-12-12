@@ -85,6 +85,7 @@ func (p *Parser) parseExpression(precedence int) Expr {
 	for {
 		curOp := p.cur.Lexeme
 
+		// Caso especial para operador ternário
 		if curOp == "?" {
 			if TERNARY < precedence {
 				return left
@@ -94,6 +95,18 @@ func (p *Parser) parseExpression(precedence int) Expr {
 		}
 
 		curPrec := p.precedenceOf(curOp)
+
+		// Se não for operador infixo ou a precedência for muito baixa, retorna
+		if !p.isInfixOperator(p.cur) && !p.isPostfixOperator(p.cur) &&
+			curOp != "(" && curOp != "[" && curOp != "." &&
+			!(curOp == "<" && p.isGenericCall()) {
+			return left
+		}
+
+		// Verifica precedência
+		if curPrec < precedence {
+			return left
+		}
 
 		switch {
 		case curOp == "(":
@@ -156,8 +169,9 @@ func (p *Parser) parseKeywordExpr() Expr {
 		p.advanceToken()
 		return &ThisExpr{}
 	default:
-		if isTypeKeyword(p.cur.Lexeme) && p.nxt.Lexeme == "function" {
-			return p.parseFunctionExpr()
+		// Verifica se é uma palavra-chave de tipo
+		if isTypeKeyword(p.cur.Lexeme) {
+			return nil
 		}
 		p.errorf("unexpected keyword: %s", p.cur.Lexeme)
 		return nil
@@ -179,6 +193,7 @@ func (p *Parser) parseOperatorExpr() Expr {
 		return p.parseArrayLiteral()
 	case "-", "!", "+", "++", "--":
 		return p.parsePrefixExpr()
+
 	default:
 		p.errorf("unexpected operator: %s", p.cur.Lexeme)
 		return nil
