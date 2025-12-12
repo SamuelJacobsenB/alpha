@@ -1,36 +1,29 @@
 package parser
 
+// Node é a interface comum a todos os nós da AST.
+type Node interface {
+	nodePos()
+}
+
 // Stmt representa uma instrução/declaração
-type Stmt interface{ stmtNode() }
+type Stmt interface {
+	stmtNode()
+	nodePos()
+}
 
 // Expr representa uma expressão
-type Expr interface{ exprNode() }
+type Expr interface {
+	exprNode()
+	nodePos()
+}
 
 // Type representa um tipo na linguagem
-type Type interface{ typeNode() }
-
-// PrimitiveType representa tipos básicos como int, string, etc.
-type PrimitiveType struct {
-	Name string // ex: "int", "string", "float"
+type Type interface {
+	typeNode()
+	nodePos()
 }
 
-func (*PrimitiveType) typeNode() {}
-
-// IdentifierType representa um tipo referenciado por identificador (ex: T em genéricos)
-type IdentifierType struct {
-	Name string
-}
-
-func (*IdentifierType) typeNode() {}
-
-// ArrayType representa um tipo de array
-type ArrayType struct {
-	ElementType Type
-	Size        Expr // pode ser nil para arrays dinâmicos
-}
-
-func (*ArrayType) typeNode() {}
-
+// Program
 type Program struct {
 	Body []Stmt
 }
@@ -38,11 +31,12 @@ type Program struct {
 // Statements / Declarações
 type VarDecl struct {
 	Name string
-	Type Type // pode ser nil se inferido (ex: var x = 10)
-	Init Expr // pode ser nil
+	Type Type
+	Init Expr
 }
 
 func (v *VarDecl) stmtNode() {}
+func (v *VarDecl) nodePos()  {}
 
 type ConstDecl struct {
 	Name string
@@ -50,12 +44,14 @@ type ConstDecl struct {
 }
 
 func (c *ConstDecl) stmtNode() {}
+func (c *ConstDecl) nodePos()  {}
 
 type ExprStmt struct {
 	Expr Expr
 }
 
 func (e *ExprStmt) stmtNode() {}
+func (e *ExprStmt) nodePos()  {}
 
 type IfStmt struct {
 	Cond Expr
@@ -64,6 +60,7 @@ type IfStmt struct {
 }
 
 func (i *IfStmt) stmtNode() {}
+func (i *IfStmt) nodePos()  {}
 
 type WhileStmt struct {
 	Cond Expr
@@ -71,80 +68,84 @@ type WhileStmt struct {
 }
 
 func (w *WhileStmt) stmtNode() {}
+func (w *WhileStmt) nodePos()  {}
 
-// DoWhileStmt representa do { ... } while (cond)
 type DoWhileStmt struct {
 	Body []Stmt
 	Cond Expr
 }
 
 func (d *DoWhileStmt) stmtNode() {}
+func (d *DoWhileStmt) nodePos()  {}
 
 type ForStmt struct {
-	Init Stmt // pode ser nil
-	Cond Expr // pode ser nil
-	Post Stmt // pode ser nil
+	Init Stmt
+	Cond Expr
+	Post Stmt
 	Body []Stmt
 }
 
 func (f *ForStmt) stmtNode() {}
+func (f *ForStmt) nodePos()  {}
 
 type ForInStmt struct {
-	Index    *Identifier // pode ser nil (apenas item)
+	Index    *Identifier
 	Item     *Identifier
 	Iterable Expr
 	Body     []Stmt
 }
 
 func (f *ForInStmt) stmtNode() {}
+func (f *ForInStmt) nodePos()  {}
 
-// SwitchStmt representa switch(expr) { case x: ... }
 type SwitchStmt struct {
 	Expr  Expr
 	Cases []*CaseClause
 }
 
 func (s *SwitchStmt) stmtNode() {}
+func (s *SwitchStmt) nodePos()  {}
 
-// CaseClause representa case x: ou default:
 type CaseClause struct {
-	Value Expr // nil para default
+	Value Expr
 	Body  []Stmt
 }
 
-// FunctionDecl representa uma declaração de função
+func (c *CaseClause) nodePos() {}
+
 type FunctionDecl struct {
 	Name       string
-	Generics   []*GenericParam // Parâmetros genéricos [T, U]
-	Params     []*Param        // Parâmetros da função
-	ReturnType Type            // Tipo de retorno
-	Body       []Stmt          // Corpo da função
+	Generics   []*GenericParam
+	Params     []*Param
+	ReturnType Type
+	Body       []Stmt
 }
 
 func (f *FunctionDecl) stmtNode() {}
+func (f *FunctionDecl) nodePos()  {}
 
-// GenericParam representa um parâmetro genérico como [T]
 type GenericParam struct {
 	Name string
 }
 
 func (g *GenericParam) typeNode() {}
+func (g *GenericParam) nodePos()  {}
 
-// Param representa um parâmetro de função
 type Param struct {
 	Name string
 	Type Type
 }
 
-// FunctionType representa um tipo de função
+func (p *Param) nodePos() {}
+
 type FunctionType struct {
 	Params     []Type
 	ReturnType Type
 }
 
 func (f *FunctionType) typeNode() {}
+func (f *FunctionType) nodePos()  {}
 
-// FunctionExpr representa uma expressão de função (função anônima)
 type FunctionExpr struct {
 	Generics   []*GenericParam
 	Params     []*Param
@@ -153,16 +154,16 @@ type FunctionExpr struct {
 }
 
 func (f *FunctionExpr) exprNode() {}
+func (f *FunctionExpr) nodePos()  {}
 
-// GenericSpecialization representa <int>func()
 type GenericSpecialization struct {
 	Callee   Expr
 	TypeArgs []Type
 }
 
 func (g *GenericSpecialization) exprNode() {}
+func (g *GenericSpecialization) nodePos()  {}
 
-// ClassDecl representa uma declaração de classe
 type ClassDecl struct {
 	Name        string
 	Generics    []*GenericParam
@@ -172,20 +173,22 @@ type ClassDecl struct {
 }
 
 func (c *ClassDecl) stmtNode() {}
+func (c *ClassDecl) nodePos()  {}
 
-// FieldDecl representa um campo da classe
 type FieldDecl struct {
 	Name string
 	Type Type
 }
 
-// ConstructorDecl representa o construtor
+func (f *FieldDecl) nodePos() {}
+
 type ConstructorDecl struct {
 	Params []*Param
 	Body   []Stmt
 }
 
-// MethodDecl representa um método da classe
+func (c *ConstructorDecl) nodePos() {}
+
 type MethodDecl struct {
 	Name       string
 	Generics   []*GenericParam
@@ -194,7 +197,8 @@ type MethodDecl struct {
 	Body       []Stmt
 }
 
-// TypeDecl representa uma declaração de tipo
+func (m *MethodDecl) nodePos() {}
+
 type TypeDecl struct {
 	Name     string
 	Generics []*GenericParam
@@ -202,58 +206,61 @@ type TypeDecl struct {
 }
 
 func (t *TypeDecl) stmtNode() {}
-
-// StructType representa um tipo struct como { string text; string sender }
-type StructType struct {
-	Fields []*FieldDecl
-}
-
-func (s *StructType) typeNode() {}
+func (t *TypeDecl) nodePos()  {}
 
 type ReturnStmt struct {
-	Value Expr // pode ser nil
+	Value Expr
 }
 
 func (r *ReturnStmt) stmtNode() {}
+func (r *ReturnStmt) nodePos()  {}
 
 type BlockStmt struct {
 	Body []Stmt
 }
 
 func (b *BlockStmt) stmtNode() {}
+func (b *BlockStmt) nodePos()  {}
 
 // Expressões
 type Identifier struct{ Name string }
 
 func (i *Identifier) exprNode() {}
+func (i *Identifier) nodePos()  {}
 
 type IntLiteral struct{ Value int64 }
 
 func (i *IntLiteral) exprNode() {}
+func (i *IntLiteral) nodePos()  {}
 
 type FloatLiteral struct{ Value float64 }
 
 func (f *FloatLiteral) exprNode() {}
+func (f *FloatLiteral) nodePos()  {}
 
 type StringLiteral struct{ Value string }
 
 func (s *StringLiteral) exprNode() {}
+func (s *StringLiteral) nodePos()  {}
 
 type BoolLiteral struct{ Value bool }
 
 func (b *BoolLiteral) exprNode() {}
+func (b *BoolLiteral) nodePos()  {}
 
 type NullLiteral struct{}
 
 func (n *NullLiteral) exprNode() {}
+func (n *NullLiteral) nodePos()  {}
 
 type UnaryExpr struct {
 	Op      string
 	Expr    Expr
-	Postfix bool // true para i++, false para ++i
+	Postfix bool
 }
 
 func (u *UnaryExpr) exprNode() {}
+func (u *UnaryExpr) nodePos()  {}
 
 type BinaryExpr struct {
 	Left  Expr
@@ -262,8 +269,8 @@ type BinaryExpr struct {
 }
 
 func (b *BinaryExpr) exprNode() {}
+func (b *BinaryExpr) nodePos()  {}
 
-// TernaryExpr representa cond ? trueExpr : falseExpr
 type TernaryExpr struct {
 	Cond      Expr
 	TrueExpr  Expr
@@ -271,6 +278,7 @@ type TernaryExpr struct {
 }
 
 func (t *TernaryExpr) exprNode() {}
+func (t *TernaryExpr) nodePos()  {}
 
 type CallExpr struct {
 	Callee Expr
@@ -278,123 +286,157 @@ type CallExpr struct {
 }
 
 func (c *CallExpr) exprNode() {}
+func (c *CallExpr) nodePos()  {}
 
 type AssignExpr struct {
-	Left  Expr // geralmente Identifier
+	Left  Expr
 	Right Expr
 }
 
 func (a *AssignExpr) exprNode() {}
+func (a *AssignExpr) nodePos()  {}
 
-// ArrayLiteral representa um literal de array {1, 2, 3}
 type ArrayLiteral struct {
 	Elements []Expr
 }
 
 func (a *ArrayLiteral) exprNode() {}
+func (a *ArrayLiteral) nodePos()  {}
 
-// IndexExpr representa acesso a array: arr[index]
 type IndexExpr struct {
 	Array Expr
 	Index Expr
 }
 
 func (i *IndexExpr) exprNode() {}
+func (i *IndexExpr) nodePos()  {}
 
-// NullableType representa tipos anuláveis como int?
-type NullableType struct {
-	BaseType Type
-}
-
-func (*NullableType) typeNode() {}
-
-// PointerType representa tipos ponteiro como int*
-type PointerType struct {
-	BaseType Type
-}
-
-func (*PointerType) typeNode() {}
-
-// SetType representa set<int>
-type SetType struct {
-	ElementType Type
-}
-
-func (*SetType) typeNode() {}
-
-// MapType representa map<int, string>
-type MapType struct {
-	KeyType   Type
-	ValueType Type
-}
-
-func (*MapType) typeNode() {}
-
-// UnionType representa string | float
-type UnionType struct {
-	Types []Type
-}
-
-func (*UnionType) typeNode() {}
-
-// SetLiteral representa [1, 2, 4] para sets
 type SetLiteral struct {
 	Elements []Expr
 }
 
 func (*SetLiteral) exprNode() {}
+func (*SetLiteral) nodePos()  {}
 
-// MapLiteral representa {1: "Hello", 2: "Bye"}
 type MapLiteral struct {
 	Entries []*MapEntry
 }
 
 func (*MapLiteral) exprNode() {}
+func (*MapLiteral) nodePos()  {}
 
-// MapEntry representa uma entrada key:value no mapa
 type MapEntry struct {
 	Key   Expr
 	Value Expr
 }
 
-// ReferenceExpr representa &hello
+func (*MapEntry) nodePos() {}
+
 type ReferenceExpr struct {
 	Expr Expr
 }
 
 func (*ReferenceExpr) exprNode() {}
+func (*ReferenceExpr) nodePos()  {}
 
-// NewExpr representa new User("name", 10)
 type NewExpr struct {
 	TypeName string
-	TypeArgs []Type // Para genéricos: new List<int>()
+	TypeArgs []Type
 	Args     []Expr
 }
 
 func (n *NewExpr) exprNode() {}
+func (n *NewExpr) nodePos()  {}
 
-// MemberExpr representa user.name ou user.method()
 type MemberExpr struct {
 	Object Expr
 	Member string
 }
 
 func (m *MemberExpr) exprNode() {}
+func (m *MemberExpr) nodePos()  {}
 
-// ThisExpr representa this
 type ThisExpr struct{}
 
 func (t *ThisExpr) exprNode() {}
+func (t *ThisExpr) nodePos()  {}
 
-// StructLiteral representa inicialização de struct: { text: "hi", sender: "Sam" }
 type StructLiteral struct {
 	Fields []*StructField
 }
 
 func (s *StructLiteral) exprNode() {}
+func (s *StructLiteral) nodePos()  {}
 
-// StructField representa field: value
 type StructField struct {
 	Name  string
 	Value Expr
 }
+
+func (s *StructField) nodePos() {}
+
+// Tipos
+type PrimitiveType struct {
+	Name string
+}
+
+func (*PrimitiveType) typeNode() {}
+func (*PrimitiveType) nodePos()  {}
+
+type IdentifierType struct {
+	Name string
+}
+
+func (*IdentifierType) typeNode() {}
+func (*IdentifierType) nodePos()  {}
+
+type ArrayType struct {
+	ElementType Type
+	Size        Expr
+}
+
+func (*ArrayType) typeNode() {}
+func (*ArrayType) nodePos()  {}
+
+type NullableType struct {
+	BaseType Type
+}
+
+func (*NullableType) typeNode() {}
+func (*NullableType) nodePos()  {}
+
+type PointerType struct {
+	BaseType Type
+}
+
+func (*PointerType) typeNode() {}
+func (*PointerType) nodePos()  {}
+
+type SetType struct {
+	ElementType Type
+}
+
+func (*SetType) typeNode() {}
+func (*SetType) nodePos()  {}
+
+type MapType struct {
+	KeyType   Type
+	ValueType Type
+}
+
+func (*MapType) typeNode() {}
+func (*MapType) nodePos()  {}
+
+type UnionType struct {
+	Types []Type
+}
+
+func (*UnionType) typeNode() {}
+func (*UnionType) nodePos()  {}
+
+type StructType struct {
+	Fields []*FieldDecl
+}
+
+func (s *StructType) typeNode() {}
+func (s *StructType) nodePos()  {}

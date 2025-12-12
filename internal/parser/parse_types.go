@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"fmt"
+
 	"github.com/alpha/internal/lexer"
 )
 
@@ -64,7 +66,9 @@ func (p *Parser) parseSingleType() Type {
 
 func (p *Parser) parseBaseType() Type {
 	name := p.cur.Lexeme
+	fmt.Println("before", p.cur.Lexeme)
 	p.advanceToken()
+	fmt.Println("after", p.cur.Lexeme)
 
 	if p.cur.Lexeme == "<" {
 		// Verificar se é realmente um tipo genérico (ex: set<int>, map<int, string>)

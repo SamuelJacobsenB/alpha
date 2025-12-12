@@ -26,12 +26,17 @@ func testCase(name, src string) {
 }
 
 func main() {
+	testCase("Declarações", `
+		int num;
+		string hello = "hiiiiiii";
+		bool ativo = false
+
+		int[] nums = [1, 2, 3, 4]
+	`)
+
 	// Teste 1: For loop com declaração
 	testCase("For Loop com Declaração", `
-		int a;
-		for(var i = 5; i < 10; i++) {
-			a += i;
-		}
+		for(int i = 5; i < 10; i++) {}
 	`)
 
 	// Teste 2: Switch statement

@@ -60,3 +60,44 @@ func (p *Parser) parseNumberToken(tok lexer.Token) Expr {
 	p.advanceToken()
 	return &FloatLiteral{Value: f}
 }
+
+func (p *Parser) expectAndConsume(expected string) bool {
+	if p.cur.Lexeme == expected {
+		p.advanceToken()
+		return true
+	}
+	p.errorf("expected '%s', got '%s'", expected, p.cur.Lexeme)
+	return false
+}
+
+func (p *Parser) isAtEndOfStatement() bool {
+	return p.cur.Lexeme == ";" || p.cur.Lexeme == "}" ||
+		p.cur.Type == lexer.EOF || p.cur.Lexeme == ")"
+}
+
+func (p *Parser) syncToNextStmt() {
+	for !p.isAtStmtStart() && p.cur.Type != lexer.EOF {
+		p.advanceToken()
+	}
+}
+
+func (p *Parser) isAtStmtStart() bool {
+	return p.cur.Lexeme == ";" || p.cur.Lexeme == "}" ||
+		p.cur.Type == lexer.KEYWORD || isTypeKeyword(p.cur.Lexeme) ||
+		p.cur.Lexeme == "{"
+}
+
+func (p *Parser) HasErrors() bool {
+	return len(p.Errors) > 0
+}
+
+func (p *Parser) ErrorsText() string {
+	if len(p.Errors) == 0 {
+		return ""
+	}
+	out := ""
+	for _, e := range p.Errors {
+		out += e + "\n"
+	}
+	return out
+}
