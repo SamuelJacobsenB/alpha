@@ -1,11 +1,104 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Alpha - Community</title>
-</head>
-<body>
-    
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Alpha Community</title>
+    <link rel="stylesheet" href="../css/main.css" />
+    <link rel="stylesheet" href="../css/components/header.css" />
+    <link rel="stylesheet" href="../css/components/footer.css" />
+    <link rel="stylesheet" href="../css/pages/community.css" />
+  </head>
+  <body>
+    <header>
+      <a href="home.html" class="logo">
+        <img
+          src="../assets/images/logo.png"
+          alt="Logo"
+          width="40"
+          height="40"
+        />
+        <h2>Alpha</h2>
+      </a>
+      <nav id="menu">
+        <ul>
+          <li><a href="home.html">Home</a></li>
+          <li><a href="documentation.html">Documentation</a></li>
+          <li><a href="download.html">Download</a></li>
+          <li><a href="examples.html">Examples</a></li>
+          <li>
+            <a
+              href="community.html"
+              style="color: var(--primary-color); font-weight: bold"
+              >Community</a
+            >
+          </li>
+        </ul>
+      </nav>
+      <button class="btn btn-primary start">Start</button>
+      <button class="btn-primary burguer" id="burguer">
+        <span class="line"></span><span class="line"></span
+        ><span class="line"></span>
+      </button>
+    </header>
+
+    <main>
+      <section class="community-hero">
+        <h1>Join 50,000+ Developers</h1>
+        <p>
+          Alpha is open-source and community driven. Help us build the future.
+        </p>
+      </section>
+
+      <section class="community-grid">
+        <div class="comm-card">
+          <div>
+            <h3>GitHub</h3>
+            <p>
+              Contribute to the compiler core, report issues, or explore the
+              source code.
+            </p>
+            <div class="stats">
+              <span>⭐ 12k Stars</span>
+              <span>🔄 400 Forks</span>
+            </div>
+          </div>
+          <a href="#" class="btn btn-gray">View Repository</a>
+        </div>
+
+        <div class="comm-card">
+          <div>
+            <h3>Discord Server</h3>
+            <p>Real-time discussions, Q&A, and showcasing your projects.</p>
+            <div class="stats">
+              <span>🟢 2,400 Online</span>
+            </div>
+          </div>
+          <a
+            href="#"
+            class="btn btn-primary"
+            style="background-color: #5865f2; border-color: #5865f2"
+            >Join Discord</a
+          >
+        </div>
+
+        <div class="comm-card">
+          <div>
+            <h3>Discourse Forum</h3>
+            <p>
+              Long-term discussions, RFCs for new language features, and
+              tutorials.
+            </p>
+          </div>
+          <a href="#" class="btn btn-gray">Read Topics</a>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="footer-content">
+        <p class="copyright">&copy; 2024 Alpha Language.</p>
+      </div>
+    </footer>
+    <script src="../js/header.js"></script>
+  </body>
 </html>

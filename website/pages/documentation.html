@@ -1,11 +1,206 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Alpha - Docs</title>
-</head>
-<body>
-    
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Documentation - Alpha Language</title>
+    <link rel="stylesheet" href="../css/main.css" />
+    <link rel="stylesheet" href="../css/components/header.css" />
+    <link rel="stylesheet" href="../css/components/footer.css" />
+    <link rel="stylesheet" href="../css/components/code.css" />
+    <link rel="stylesheet" href="../css/pages/documentation.css" />
+  </head>
+  <body>
+    <header>
+      <a href="home.html" class="logo">
+        <img
+          src="../assets/images/logo.png"
+          alt="Logo"
+          width="40"
+          height="40"
+        />
+        <h2>Alpha</h2>
+      </a>
+      <nav id="menu">
+        <ul>
+          <li><a href="home.html">Home</a></li>
+          <li>
+            <a
+              href="documentation.html"
+              class="active-link"
+              style="color: var(--primary-color); font-weight: bold"
+              >Documentation</a
+            >
+          </li>
+          <li><a href="download.html">Download</a></li>
+          <li><a href="examples.html">Examples</a></li>
+          <li><a href="community.html">Community</a></li>
+        </ul>
+      </nav>
+      <button class="btn btn-primary start">Start</button>
+      <button class="btn-primary burguer" id="burguer">
+        <span class="line"></span><span class="line"></span
+        ><span class="line"></span>
+      </button>
+    </header>
+
+    <main class="docs-layout">
+      <aside class="docs-sidebar">
+        <h4>Getting Started</h4>
+        <ul>
+          <li><a href="#intro" class="active">Introduction</a></li>
+          <li><a href="#install">Installation</a></li>
+          <li><a href="#hello-world">Hello World</a></li>
+        </ul>
+
+        <h4>Core Concepts</h4>
+        <ul>
+          <li><a href="#variables">Variables & Types</a></li>
+          <li><a href="#control-flow">Control Flow</a></li>
+          <li><a href="#functions">Functions</a></li>
+        </ul>
+
+        <h4>Standard Lib</h4>
+        <ul>
+          <li><a href="#std-io">Alpha.IO</a></li>
+        </ul>
+      </aside>
+
+      <article class="docs-content">
+        <h1 id="intro">Introduction to Alpha</h1>
+        <p>
+          Alpha is a statically typed, compiled language designed for building
+          <strong>scalable</strong> and <strong>maintainable</strong> software.
+          It combines the performance of C with the expressiveness of modern
+          scripting languages.
+        </p>
+
+        <div class="info-box">
+          <strong>Note:</strong> Alpha is currently in version 1.0.0. Features
+          may change in future releases.
+        </div>
+
+        <h2 id="install">Installation</h2>
+        <p>
+          To install Alpha, download the binary for your operating system from
+          the
+          <a href="download.html" style="color: var(--primary-color)"
+            >Download page</a
+          >
+          or use the terminal:
+        </p>
+        <div
+          class="code-content"
+          style="
+            background: #1e1e1e;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            color: #fff;
+          "
+        >
+          <code>curl -s https://get.alpha-lang.org | bash</code>
+        </div>
+
+        <h2 id="hello-world">Your First Program</h2>
+        <p>
+          Create a file named <code>main.al</code> and paste the following code:
+        </p>
+        <section class="code-section" style="width: 100%">
+          <div class="code-header">
+            <div class="title"><small>main.al</small></div>
+          </div>
+          <div class="code-content">
+            <code>
+              import alpha.io <br /><br />
+              func main() { <br />
+              &nbsp;&nbsp;io.println("Hello, World!") <br />
+              }
+            </code>
+          </div>
+        </section>
+
+        <h2 id="variables" style="margin-top: 4rem">Variables & Types</h2>
+        <p>
+          Alpha is strongly typed. You can declare variables using
+          <code>var</code> (mutable) or <code>let</code> (immutable).
+        </p>
+        <section class="code-section" style="width: 100%">
+          <div class="code-header">
+            <div class="title"><small>types.al</small></div>
+          </div>
+          <div class="code-content">
+            <code>
+              var count: int = 10 <br />
+              let name: string = "Alpha" <br />
+              var isActive: bool = true <br /><br />
+              // Type inference is also supported <br />
+              var score = 95.5 // inferred as float
+            </code>
+          </div>
+        </section>
+
+        <h2 id="control-flow" style="margin-top: 4rem">Control Flow</h2>
+        <p>
+          Standard <code>if</code>, <code>else</code>, and loops work as
+          expected.
+        </p>
+        <section class="code-section" style="width: 100%">
+          <div class="code-header">
+            <div class="title"><small>flow.al</small></div>
+          </div>
+          <div class="code-content">
+            <code>
+              if (score > 90) { <br />
+              &nbsp;&nbsp;io.println("Excellent!") <br />
+              } else { <br />
+              &nbsp;&nbsp;io.println("Keep trying.") <br />
+              } <br /><br />
+              for (i in 0..10) { <br />
+              &nbsp;&nbsp;io.print(i) <br />
+              }
+            </code>
+          </div>
+        </section>
+
+        <h2 id="functions" style="margin-top: 4rem">Functions</h2>
+        <p>Functions are first-class citizens in Alpha.</p>
+        <section class="code-section" style="width: 100%">
+          <div class="code-header">
+            <div class="title"><small>func.al</small></div>
+          </div>
+          <div class="code-content">
+            <code>
+              func add(a: int, b: int) -> int { <br />
+              &nbsp;&nbsp;return a + b <br />
+              }
+            </code>
+          </div>
+        </section>
+
+        <h2 id="std-io" style="margin-top: 4rem">Standard IO</h2>
+        <p>
+          The <code>alpha.io</code> module provides basic input and output
+          operations.
+        </p>
+        <ul>
+          <li>
+            <strong>io.print(msg)</strong>: Prints to stdout without newline.
+          </li>
+          <li>
+            <strong>io.println(msg)</strong>: Prints to stdout with newline.
+          </li>
+          <li><strong>io.readln()</strong>: Reads a line from stdin.</li>
+        </ul>
+      </article>
+    </main>
+
+    <footer>
+      <div class="footer-content">
+        <p class="copyright">&copy; 2024 Alpha Language.</p>
+      </div>
+    </footer>
+
+    <script src="../js/header.js"></script>
+    <script src="../js/pages/docs.js"></script>
+  </body>
 </html>

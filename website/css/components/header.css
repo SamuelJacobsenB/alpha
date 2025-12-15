@@ -1,6 +1,7 @@
 /* Header */
 header {
   position: sticky;
+  z-index: 10;
   top: 0;
   display: flex;
   justify-content: space-between;
@@ -33,23 +34,33 @@ header .logo {
 header nav {
   display: none;
 }
+header nav.open {
+  display: block;
+}
 
 header nav ul {
+  position: absolute;
+  top: 70px;
+  right: 2rem;
   display: flex;
-  gap: 30px;
+  flex-direction: column;
+  width: 260px;
   list-style: none;
+  border: 2px solid rgba(0, 0, 0, 0.25);
 
   li a {
+    display: flex;
+    align-items: center;
+    background-color: white;
     color: #555;
     text-decoration: none;
     font-size: 1rem;
-    padding: 0.4rem 1.2rem;
-    border-radius: 0.4rem;
+    padding: 1rem 1.2rem;
     transition: all 0.3s;
 
     &:hover {
       color: black;
-      background-color: #eeeeee7e;
+      background-color: #dddddd;
     }
   }
 }
@@ -78,12 +89,54 @@ header .burguer {
     height: 2px;
     width: 100%;
     border-radius: 1px;
+    transition: all 0.3s;
+  }
+}
+header .burguer.open {
+  background-color: white;
+  border: 2px solid #555;
+
+  .line {
+    background-color: #555;
+  }
+
+  .line:nth-child(1) {
+    transform: rotate(45deg) translate(6px, 6px);
+  }
+  .line:nth-child(2) {
+    opacity: 0;
+  }
+  .line:nth-child(3) {
+    transform: rotate(-45deg) translate(6px, -6px);
+  }
+
+  &:hover {
+    background-color: #dddddd;
   }
 }
 
 @media (min-width: 1024px) {
   header nav {
     display: block;
+  }
+
+  header nav ul {
+    position: relative;
+    top: 0;
+    flex-direction: row;
+    gap: 30px;
+    width: auto;
+    border: 0;
+
+    li a {
+      background-color: transparent;
+      padding: 0.4rem 1.2rem;
+      border-radius: 0.4rem;
+
+      &:hover {
+        background-color: #eeeeee7e;
+      }
+    }
   }
 
   header .start {

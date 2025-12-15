@@ -1,11 +1,122 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Alpha - Examples</title>
-</head>
-<body>
-    
-</body>
+    <link rel="stylesheet" href="../css/main.css" />
+    <link rel="stylesheet" href="../css/components/header.css" />
+    <link rel="stylesheet" href="../css/components/code.css" />
+    <link rel="stylesheet" href="../css/components/footer.css" />
+    <link rel="stylesheet" href="../css/pages/examples.css">
+    </style>
+  </head>
+  <body>
+    <header>
+      <a href="home.html" class="logo">
+        <img
+          src="../assets/images/logo.png"
+          alt="Logo"
+          width="40"
+          height="40"
+        />
+        <h2>Alpha</h2>
+      </a>
+      <nav id="menu">
+        <ul>
+          <li><a href="home.html">Home</a></li>
+          <li><a href="documentation.html">Documentation</a></li>
+          <li><a href="download.html">Download</a></li>
+          <li>
+            <a href="examples.html" style="color: black; font-weight: bold"
+              >Examples</a
+            >
+          </li>
+          <li><a href="community.html">Community</a></li>
+        </ul>
+      </nav>
+      <button class="btn btn-primary start">Start</button>
+      <button class="btn-primary burguer" id="burguer">
+        <span class="line"></span><span class="line"></span
+        ><span class="line"></span>
+      </button>
+    </header>
+
+    <main class="examples-container">
+      <h1>Code Examples</h1>
+
+      <div class="example-block">
+        <h3>Simple HTTP Server</h3>
+        <p class="example-desc">
+          Create a web server in just a few lines of code using the standard
+          library.
+        </p>
+
+        <section class="code-section">
+          <div class="code-header">
+            <div class="title">
+              <div class="circles">
+                <span class="circle red"></span
+                ><span class="circle yellow"></span
+                ><span class="circle green"></span>
+              </div>
+              <small>server.al</small>
+            </div>
+          </div>
+          <div class="code-content">
+            <code>
+              import alpha.net.http <br /><br />
+
+              func main() { <br />
+              &nbsp;&nbsp;var server = http.newServer(8080) <br /><br />
+
+              &nbsp;&nbsp;server.handle("/", (req, res) => { <br />
+              &nbsp;&nbsp;&nbsp;&nbsp;res.send("Welcome to Alpha!") <br />
+              &nbsp;&nbsp;}) <br /><br />
+
+              &nbsp;&nbsp;server.start() <br />
+              }
+            </code>
+          </div>
+        </section>
+      </div>
+
+      <div class="example-block">
+        <h3>Recursive Fibonacci</h3>
+        <p class="example-desc">
+          Demonstrating recursion and type definitions.
+        </p>
+
+        <section class="code-section">
+          <div class="code-header">
+            <div class="title">
+              <div class="circles">
+                <span class="circle red"></span
+                ><span class="circle yellow"></span
+                ><span class="circle green"></span>
+              </div>
+              <small>math.al</small>
+            </div>
+          </div>
+          <div class="code-content">
+            <code>
+              func fib(n: int) -> int { <br />
+              &nbsp;&nbsp;if (n <= 1) return n <br />
+              &nbsp;&nbsp;return fib(n - 1) + fib(n - 2) <br />
+              } <br /><br />
+
+              print(fib(10)) // Output: 55
+            </code>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <footer>
+      <div class="footer-content">
+        <p class="copyright">&copy; 2024 Alpha Language.</p>
+      </div>
+    </footer>
+    <script src="../js/header.js"></script>
+  </body>
 </html>

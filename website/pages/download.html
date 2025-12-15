@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Download Alpha</title>
+    <link rel="stylesheet" href="../css/main.css" />
+    <link rel="stylesheet" href="../css/components/header.css" />
+    <link rel="stylesheet" href="../css/components/footer.css" />
+    <link rel="stylesheet" href="../css/pages/download.css" />
+  </head>
+  <body>
+    <header>
+      <a href="home.html" class="logo">
+        <img
+          src="../assets/images/logo.png"
+          alt="Logo"
+          width="40"
+          height="40"
+        />
+        <h2>Alpha</h2>
+      </a>
+      <nav id="menu">
+        <ul>
+          <li><a href="home.html">Home</a></li>
+          <li><a href="documentation.html">Documentation</a></li>
+          <li>
+            <a
+              href="download.html"
+              style="color: var(--primary-color); font-weight: bold"
+              >Download</a
+            >
+          </li>
+          <li><a href="examples.html">Examples</a></li>
+          <li><a href="community.html">Community</a></li>
+        </ul>
+      </nav>
+      <button class="btn btn-primary start">Start</button>
+      <button class="btn-primary burguer" id="burguer">
+        <span class="line"></span><span class="line"></span
+        ><span class="line"></span>
+      </button>
+    </header>
+
+    <main>
+      <section class="download-header">
+        <h1>Install Alpha</h1>
+        <p>
+          The latest version <strong>1.0.0</strong> is ready for production.
+        </p>
+      </section>
+
+      <section class="download-grid">
+        <div class="os-card">
+          <span class="os-icon">🪟</span>
+          <h3>Windows</h3>
+          <p>Windows 10/11 (x64)</p>
+          <br />
+          <a href="#" class="btn btn-primary">Download .msi</a>
+          <br />
+          <span class="version-badge">v1.0.0</span>
+        </div>
+
+        <div class="os-card">
+          <span class="os-icon">🍎</span>
+          <h3>macOS</h3>
+          <p>Apple Silicon & Intel</p>
+          <br />
+          <a href="#" class="btn btn-gray">Download .pkg</a>
+          <br />
+          <span class="version-badge">v1.0.0</span>
+        </div>
+
+        <div class="os-card">
+          <span class="os-icon">🐧</span>
+          <h3>Linux</h3>
+          <p>Ubuntu / Debian / Fedora</p>
+          <br />
+          <a href="#" class="btn btn-gray">Download .tar.gz</a>
+          <br />
+          <span class="version-badge">v1.0.0</span>
+        </div>
+      </section>
+
+      <section class="terminal-install">
+        <h3>Quick Install (Unix/Mac)</h3>
+        <p style="color: #aaa; font-size: 0.9rem">
+          Install the latest stable release via command line.
+        </p>
+        <div class="cmd-box">
+          <span>curl -s https://get.alpha-lang.org | bash</span>
+          <button class="cmd-copy" title="Copy">📋</button>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="footer-content">
+        <p class="copyright">&copy; 2024 Alpha Language.</p>
+      </div>
+    </footer>
+    <script src="../js/header.js"></script>
+  </body>
+</html>

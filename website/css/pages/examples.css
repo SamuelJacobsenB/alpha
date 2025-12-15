@@ -1,0 +1,37 @@
+.examples-intro {
+  text-align: center;
+  max-width: 700px;
+  margin: 0 auto 3rem auto;
+}
+
+.example-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4rem;
+}
+
+.example-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.example-text {
+  text-align: center;
+  margin-bottom: 1.5rem;
+  max-width: 600px;
+}
+
+.example-text h3 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-color);
+}
+
+/* Modificação para o code-section encaixar melhor */
+.example-item .code-section {
+  width: 100%;
+  max-width: 800px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}

@@ -11,10 +11,13 @@
     />
     <link rel="stylesheet" href="../css/main.css" />
     <link rel="stylesheet" href="../css/components/header.css" />
+    <link rel="stylesheet" href="../css/components/footer.css" />
+    <link rel="stylesheet" href="../css/components/code.css" />
+    <link rel="stylesheet" href="../css/pages/home.css" />
   </head>
   <body>
     <header>
-      <a href="/" class="logo" aria-label="Alpha - Página inicial">
+      <a href="home.html" class="logo" aria-label="Alpha - Homepage">
         <img
           src="../assets/images/logo.png"
           alt="Logo Alpha"
@@ -24,28 +27,90 @@
         <h2>Alpha</h2>
       </a>
 
-      <nav aria-label="Navegação principal">
+      <nav id="menu" aria-label="Main navigation">
         <ul>
-          <li><a href="/" aria-current="page">Home</a></li>
-          <li><a href="/about">Documentation</a></li>
-          <li><a href="/services">Dowload</a></li>
-          <li><a href="/contact">Examples</a></li>
-          <li><a href="/contact">Community</a></li>
+          <li><a href="home.html" aria-current="page">Home</a></li>
+          <li><a href="documentation.html">Documentation</a></li>
+          <li><a href="download.html">Download</a></li>
+          <li><a href="examples.html">Examples</a></li>
+          <li><a href="community.html">Community</a></li>
         </ul>
       </nav>
 
-      <button class="btn btn-primary start" aria-label="Começar">Start</button>
+      <button class="btn btn-primary start" aria-label="Start">Start</button>
 
-      <button
-        class="btn-primary burguer"
-        aria-label="Abrir menu"
-        aria-expanded="false"
-        aria-controls="mobile-menu"
-      >
-        <span class="line" aria-hidden="true"></span>
-        <span class="line" aria-hidden="true"></span>
-        <span class="line" aria-hidden="true"></span>
+      <button class="btn-primary burguer" id="burguer" aria-label="Open menu">
+        <span class="line"></span>
+        <span class="line"></span>
+        <span class="line"></span>
       </button>
     </header>
+
+    <main>
+      <section class="main-content">
+        <span class="version">Version 1.0.0</span>
+        <h1>Alpha: Modernity and Productivity in One Language</h1>
+        <h2>A typed, fast, and expressive language for modern development.</h2>
+        <div class="buttons">
+          <a href="download.html" class="btn btn-primary">Download Now</a>
+          <a href="documentation.html" class="btn btn-gray"
+            >&lt;/&gt; Read Documentation</a
+          >
+        </div>
+      </section>
+
+      <section class="code-section">
+        <div class="code-header">
+          <div class="title">
+            <div class="circles">
+              <span class="circle red"></span>
+              <span class="circle yellow"></span>
+              <span class="circle green"></span>
+            </div>
+            <small>>_</small>
+            <small class="code-title">Alpha Playground</small>
+          </div>
+          <div class="buttons">
+            <button class="btn small-btn btn-gray">Reset</button>
+            <button class="btn small-btn btn-primary">Execute</button>
+          </div>
+        </div>
+
+        <div class="code-content">
+          <code>
+            package main <br /><br />
+            import alpha.console <br /><br />
+            void function main() { <br />
+            &nbsp;&nbsp;var nome = "Alpha" <br /><br />
+            &nbsp;&nbsp;console.log("Hello " + nome) <br />
+            }
+          </code>
+          <textarea
+            class="output"
+            placeholder="Output will be displayed here..."
+            readonly
+            disabled
+          ></textarea>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="footer-content">
+        <div class="footer-logo">
+          <span>Alpha Lang</span>
+        </div>
+        <ul class="footer-links">
+          <li><a href="documentation.html">Docs</a></li>
+          <li><a href="download.html">Download</a></li>
+          <li><a href="community.html">Community</a></li>
+          <li><a href="https://github.com">GitHub</a></li>
+        </ul>
+        <p class="copyright">&copy; 2025 Alpha Language. Open Source.</p>
+      </div>
+    </footer>
+
+    <script src="../js/header.js"></script>
+    <script src="../js/home.js"></script>
   </body>
 </html>

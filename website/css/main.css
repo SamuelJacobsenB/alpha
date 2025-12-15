@@ -1,5 +1,18 @@
+:root {
+  --primary-color: #ff3131;
+  --primary-hover: #d92626;
+  --bg-color: #f8f9fa;
+  --text-color: #333;
+  --text-muted: #666;
+  --border-color: #e2e8f0;
+  --white: #ffffff;
+  --code-bg: #1e1e1e;
+  --font-main: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  --font-mono: "Fira Code", "Courier New", monospace;
+}
+
 * {
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--font-main);
   padding: 0;
   margin: 0;
   box-sizing: border-box;
@@ -8,33 +21,63 @@
 html,
 body {
   min-width: 100%;
-  min-height: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 body {
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  background-color: white;
-  background-image: linear-gradient(to right, #f0f0f0 1px, transparent 1px),
-    linear-gradient(to bottom, #f0f0f0 1px, transparent 1px);
-  background-size: 60px 60px;
+  background-color: var(--bg-color);
+  background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
+  background-size: 20px 20px;
+  color: var(--text-color);
+  line-height: 1.6;
 }
 
+/* Utilitários de Botão */
 .btn {
-  padding: 0.4rem 1.2rem;
+  padding: 0.6rem 1.5rem;
   font-size: 1rem;
   border: none;
-  border-radius: 0.3rem;
+  border-radius: 0.5rem;
   text-decoration: none;
   text-align: center;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.btn:active {
+  transform: scale(0.98);
 }
 
 .btn-primary {
-  background-color: #ff3131;
-  color: white;
+  background-color: var(--primary-color);
+  color: var(--white);
+}
 
-  &:hover {
-    background-color: #cd2828;
-  }
+.btn-primary:hover {
+  background-color: var(--primary-hover);
+  box-shadow: 0 4px 12px rgba(255, 49, 49, 0.3);
+}
+
+.btn-gray {
+  background-color: white;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+
+.btn-gray:hover {
+  background-color: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+/* Layout Padrão */
+main {
+  flex: 1; /* Garante que o footer vá para o final */
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
 }

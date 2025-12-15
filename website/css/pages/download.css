@@ -1,0 +1,82 @@
+.download-header {
+  text-align: center;
+  margin-bottom: 4rem;
+}
+
+.download-header h1 {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.download-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2rem;
+  margin-bottom: 4rem;
+}
+
+.os-card {
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 1rem;
+  padding: 2rem;
+  text-align: center;
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.os-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+  border-color: var(--primary-color);
+}
+
+.os-icon {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+.version-badge {
+  background: #edf2f7;
+  color: #4a5568;
+  padding: 0.25rem 0.75rem;
+  border-radius: 99px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  margin-top: 1rem;
+  display: inline-block;
+}
+
+/* Terminal Section */
+.terminal-install {
+  background: #1e1e1e;
+  color: white;
+  padding: 2rem;
+  border-radius: 1rem;
+  max-width: 700px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.cmd-box {
+  background: #2d2d2d;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  font-family: var(--font-mono);
+  margin-top: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid #444;
+}
+
+.cmd-copy {
+  background: transparent;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 1.2rem;
+}
+.cmd-copy:hover {
+  color: white;
+}

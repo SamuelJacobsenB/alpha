@@ -1,0 +1,51 @@
+.community-hero {
+  text-align: center;
+  padding: 3rem 1rem;
+  background: white;
+  border-radius: 1rem;
+  margin-bottom: 3rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.community-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+}
+
+.comm-card {
+  background: white;
+  padding: 2rem;
+  border-radius: 1rem;
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  transition: all 0.3s ease;
+}
+
+.comm-card:hover {
+  transform: translateY(-5px);
+  border-color: var(--primary-color);
+}
+
+.comm-card h3 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.comm-card p {
+  color: var(--text-muted);
+  margin-bottom: 2rem;
+  flex-grow: 1;
+}
+
+.stats {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+  font-weight: bold;
+}

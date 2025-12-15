@@ -1,0 +1,77 @@
+.code-section {
+  background-color: rgb(244, 244, 244);
+  color: #f8f8f2;
+  width: clamp(300px, 80%, 800px);
+  border-radius: 1rem;
+  padding-bottom: 1rem;
+  overflow: hidden;
+}
+
+.code-section > .code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #e2e8f0;
+  font-size: 0.9rem;
+  font-weight: lighter;
+  width: 100%;
+  padding: 0.8rem 1.2rem;
+
+  .title {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+
+    .circles {
+      display: flex;
+      gap: 0.4rem;
+
+      .circle {
+        width: 0.8rem;
+        height: 0.8rem;
+        border-radius: 50%;
+      }
+
+      .red {
+        background-color: #ff5f56;
+      }
+
+      .yellow {
+        background-color: #ffbd2e;
+      }
+
+      .green {
+        background-color: #27c93f;
+      }
+    }
+
+    small {
+      font-size: 0.9rem;
+      color: #ff3131;
+    }
+
+    small.code-title {
+      color: #333;
+    }
+  }
+}
+
+.code-section > .code-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 1rem;
+
+  code,
+  .output {
+    flex: 1;
+    background-color: white;
+    color: #333;
+    font-family: "Fira Code", monospace;
+    font-size: 1rem;
+    line-height: 1.5;
+    padding: 1rem;
+    border: none;
+    overflow: auto;
+  }
+}
