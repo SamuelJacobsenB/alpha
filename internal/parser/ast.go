@@ -440,3 +440,13 @@ type StructType struct {
 
 func (s *StructType) typeNode() {}
 func (s *StructType) nodePos()  {}
+
+type BreakStmt struct{}
+
+func (b *BreakStmt) stmtNode() {}
+func (b *BreakStmt) nodePos()  {}
+
+type ContinueStmt struct{}
+
+func (c *ContinueStmt) stmtNode() {}
+func (c *ContinueStmt) nodePos()  {}

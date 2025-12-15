@@ -123,8 +123,8 @@ func (p *Parser) parseExpression(precedence int) Expr {
 			left = p.parseMemberAccess(left)
 		case p.isInfixOperator(p.cur):
 			left = p.parseInfix(left, curPrec)
-		case curOp == "<" && p.isGenericCall():
-			left = p.parseGenericCall(left)
+		case curOp == "<" && p.isGenericSpecialization():
+			left = p.parseGenericSpecialization(left)
 		case p.isPostfixOperator(p.cur):
 			left = p.parsePostfix(left, curPrec)
 		default:
@@ -138,6 +138,12 @@ func (p *Parser) parsePrimary() Expr {
 	case lexer.IDENT:
 		ident := &Identifier{Name: p.cur.Lexeme}
 		p.advanceToken()
+
+		// Verifica se é uma especialização genérica: ident < T > ( ... )
+		if p.cur.Lexeme == "<" && p.isGenericCall() {
+			return ident
+		}
+
 		return ident
 	case lexer.INT, lexer.FLOAT:
 		return p.parseNumberToken(p.cur)
@@ -418,29 +424,6 @@ func (p *Parser) parseNewExpr() Expr {
 	}
 }
 
-func (p *Parser) parseGenericCall(left Expr) Expr {
-	p.advanceToken()
-	typeArgs := p.parseTypeArguments()
-	if typeArgs == nil {
-		return nil
-	}
-	if !p.expectAndConsume(">") {
-		return nil
-	}
-	if p.cur.Lexeme != "(" {
-		p.errorf("expected '(' after generic arguments")
-		return nil
-	}
-	call := p.parseCall(left)
-	if call == nil {
-		return nil
-	}
-	return &GenericSpecialization{
-		Callee:   left,
-		TypeArgs: typeArgs,
-	}
-}
-
 func (p *Parser) parseTypeArguments() []Type {
 	var typeArgs []Type
 	for {
@@ -574,4 +557,80 @@ func (p *Parser) parseArrayElements() []Expr {
 		}
 	}
 	return elements
+}
+
+func (p *Parser) isGenericSpecialization() bool {
+	// Salva estado
+	savedCur := p.cur
+	savedNxt := p.nxt
+
+	defer func() {
+		p.cur = savedCur
+		p.nxt = savedNxt
+	}()
+
+	// Verifica padrão: IDENT "<" TYPE ("," TYPE)* ">" "("
+	if p.cur.Type != lexer.IDENT {
+		return false
+	}
+	p.advanceToken() // consume IDENT
+
+	if p.cur.Lexeme != "<" {
+		return false
+	}
+	p.advanceToken() // consume '<'
+
+	// Parse tipo
+	if !isTypeKeyword(p.cur.Lexeme) && p.cur.Type != lexer.IDENT {
+		return false
+	}
+	p.advanceToken() // consume type
+
+	// Possíveis mais tipos separados por vírgula
+	for p.cur.Lexeme == "," {
+		p.advanceToken() // consume ','
+		if !isTypeKeyword(p.cur.Lexeme) && p.cur.Type != lexer.IDENT {
+			return false
+		}
+		p.advanceToken() // consume type
+	}
+
+	if p.cur.Lexeme != ">" {
+		return false
+	}
+	p.advanceToken() // consume '>'
+
+	return p.cur.Lexeme == "("
+}
+
+func (p *Parser) parseGenericSpecialization(left Expr) Expr {
+	// left é o nome da função (ex: identity)
+	// token atual é '<'
+	p.advanceToken() // consume '<'
+
+	typeArgs := p.parseTypeArguments()
+	if typeArgs == nil {
+		return nil
+	}
+
+	if !p.expectAndConsume(">") {
+		return nil
+	}
+
+	// Depois de <T>, deve ter '(' para a chamada de função
+	if p.cur.Lexeme != "(" {
+		p.errorf("expected '(' after generic specialization")
+		return nil
+	}
+
+	// Parse a chamada de função normal
+	call := p.parseCall(left)
+	if call == nil {
+		return nil
+	}
+
+	return &GenericSpecialization{
+		Callee:   left,
+		TypeArgs: typeArgs,
+	}
 }

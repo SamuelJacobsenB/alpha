@@ -1,3 +1,5 @@
+package func
+
 int function soma(int a, b) {
     return a + b
 }

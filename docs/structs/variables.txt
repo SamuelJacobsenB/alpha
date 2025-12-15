@@ -1,3 +1,5 @@
+package variables
+
 int num
 int num1 = 10
 var num2 = 20

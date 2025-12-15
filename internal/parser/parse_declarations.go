@@ -198,10 +198,57 @@ func (p *Parser) parseFunctionBody() []Stmt {
 	return p.parseBlock()
 }
 
-func (p *Parser) parseGenericParams() []*GenericParam {
-	if !p.expectAndConsume("<") {
+func (p *Parser) parseGenericFunctionDecl() Stmt {
+	// Já consumimos o '<' em parseTopLevel
+	// Parse generic parameters
+	generics := p.parseGenericParams()
+	if generics == nil {
 		return nil
 	}
+
+	// Parse return type
+	returnType := p.parseType()
+	if returnType == nil {
+		p.errorf("expected return type in generic function declaration")
+		return nil
+	}
+
+	if !p.expectAndConsume("function") {
+		p.errorf("expected 'function' keyword after return type")
+		return nil
+	}
+
+	// Function name
+	if p.cur.Type != lexer.IDENT {
+		p.errorf("expected function name")
+		return nil
+	}
+	name := p.cur.Lexeme
+	p.advanceToken()
+
+	// Parameters
+	params := p.parseFunctionParameters()
+	if params == nil {
+		return nil
+	}
+
+	// Body
+	body := p.parseFunctionBody()
+	if body == nil {
+		return nil
+	}
+
+	return &FunctionDecl{
+		Name:       name,
+		Generics:   generics,
+		Params:     params,
+		ReturnType: returnType,
+		Body:       body,
+	}
+}
+
+func (p *Parser) parseGenericParams() []*GenericParam {
+	// Note: O '<' já foi consumido quando chamamos esta função
 
 	var generics []*GenericParam
 
@@ -228,6 +275,7 @@ func (p *Parser) parseGenericParams() []*GenericParam {
 	}
 
 	if !p.expectAndConsume(">") {
+		p.errorf("expected '>' after generic parameters")
 		return nil
 	}
 

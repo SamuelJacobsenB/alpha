@@ -159,8 +159,8 @@ func main() {
 				return value
 			}
 			
-			int num = identity<int>(5)
-			string text = identity<string>("test")
+			int num = <int> identity(5)
+			string text = <string> identity("test")
 		`)
 
 		testCase("Função com múltiplos parâmetros genéricos", `
@@ -168,7 +168,7 @@ func main() {
 				return a
 			}
 			
-			int result = first<int, string>(10, "hello")
+			int result = <int, string> first(10, "hello")
 		`)
 
 		testCase("Função com array como parâmetro", `

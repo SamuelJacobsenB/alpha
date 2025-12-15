@@ -1,3 +1,5 @@
+package user
+
 class User {
     string name
     int age
@@ -21,3 +23,5 @@ class User {
 User user = new User("Samuel", 15, "111-111-111.11")
 var cpf = user.cpf()
 var name, age, num = <int> user.values(1000)
+
+export User
