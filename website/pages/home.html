@@ -1,11 +1,51 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Alpha</title>
-</head>
-<body>
-    
-</body>
+    <link
+      rel="shortcut icon"
+      href="../assets/favicon.ico"
+      type="image/x-icon"
+    />
+    <link rel="stylesheet" href="../css/main.css" />
+    <link rel="stylesheet" href="../css/components/header.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/" class="logo" aria-label="Alpha - Página inicial">
+        <img
+          src="../assets/images/logo.png"
+          alt="Logo Alpha"
+          width="40"
+          height="40"
+        />
+        <h2>Alpha</h2>
+      </a>
+
+      <nav aria-label="Navegação principal">
+        <ul>
+          <li><a href="/" aria-current="page">Home</a></li>
+          <li><a href="/about">Documentation</a></li>
+          <li><a href="/services">Dowload</a></li>
+          <li><a href="/contact">Examples</a></li>
+          <li><a href="/contact">Community</a></li>
+        </ul>
+      </nav>
+
+      <button class="btn btn-primary start" aria-label="Começar">Start</button>
+
+      <button
+        class="btn-primary burguer"
+        aria-label="Abrir menu"
+        aria-expanded="false"
+        aria-controls="mobile-menu"
+      >
+        <span class="line" aria-hidden="true"></span>
+        <span class="line" aria-hidden="true"></span>
+        <span class="line" aria-hidden="true"></span>
+      </button>
+    </header>
+  </body>
 </html>
