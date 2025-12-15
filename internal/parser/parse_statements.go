@@ -23,7 +23,9 @@ func (p *Parser) parseTopLevel() Stmt {
 		return p.parseClass()
 	case "type":
 		return p.parseTypeDecl()
-	case "if", "while", "do", "for", "switch", "return":
+	case "if":
+		return p.parseIf()
+	case "while", "do", "for", "switch", "return":
 		return p.parseControlStmt()
 	default:
 		if isTypeKeyword(p.cur.Lexeme) {
@@ -32,7 +34,6 @@ func (p *Parser) parseTopLevel() Stmt {
 			} else {
 				stmt = p.parseTypedVarDecl()
 				if stmt == nil {
-					// O erro já foi registrado por parseTypedVarDecl
 					return nil
 				}
 			}

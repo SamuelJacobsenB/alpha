@@ -25,7 +25,7 @@ type Token struct {
 
 var keywords = map[string]struct{}{
 	// Tipos primitivos
-	"int": {}, "string": {}, "float": {}, "boolean": {}, "void": {},
+	"int": {}, "string": {}, "float": {}, "bool": {}, "void": {},
 	"byte": {}, "char": {}, "double": {}, "error": {}, "component": {},
 
 	// Palavras-chave de declaração

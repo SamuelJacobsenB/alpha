@@ -263,17 +263,27 @@ func (p *Parser) parseClass() Stmt {
 		switch p.cur.Lexeme {
 		case "constructor":
 			constructor = p.parseConstructor()
+			if constructor == nil {
+				// Avança para evitar loop infinito
+				p.advanceToken()
+			}
 		default:
 			// Pode ser field ou method
 			if p.isMethodDeclaration() {
 				method := p.parseMethod()
 				if method != nil {
 					methods = append(methods, method)
+				} else {
+					// Se falhou, avança o token
+					p.advanceToken()
 				}
 			} else {
 				field := p.parseField()
 				if field != nil {
 					fields = append(fields, field)
+				} else {
+					// Se falhou, avança o token
+					p.advanceToken()
 				}
 			}
 		}

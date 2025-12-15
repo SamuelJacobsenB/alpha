@@ -94,6 +94,12 @@ func (p *Parser) parseExpression(precedence int) Expr {
 			continue
 		}
 
+		// Se encontramos ":" fora de um ternário, paramos
+		// (é parte da sintaxe do ternário, não um operador infixo)
+		if curOp == ":" {
+			return left
+		}
+
 		curPrec := p.precedenceOf(curOp)
 
 		// Se não for operador infixo ou a precedência for muito baixa, retorna
@@ -133,21 +139,19 @@ func (p *Parser) parsePrimary() Expr {
 		ident := &Identifier{Name: p.cur.Lexeme}
 		p.advanceToken()
 		return ident
-
 	case lexer.INT, lexer.FLOAT:
 		return p.parseNumberToken(p.cur)
-
 	case lexer.STRING:
 		str := &StringLiteral{Value: p.cur.Value}
 		p.advanceToken()
 		return str
-
 	case lexer.KEYWORD:
 		return p.parseKeywordExpr()
-
 	case lexer.OP:
+		if p.cur.Lexeme == ":" {
+			return nil
+		}
 		return p.parseOperatorExpr()
-
 	default:
 		p.advanceToken()
 		return nil
@@ -169,7 +173,6 @@ func (p *Parser) parseKeywordExpr() Expr {
 		p.advanceToken()
 		return &ThisExpr{}
 	default:
-		// Verifica se é uma palavra-chave de tipo
 		if isTypeKeyword(p.cur.Lexeme) {
 			return nil
 		}
@@ -193,7 +196,6 @@ func (p *Parser) parseOperatorExpr() Expr {
 		return p.parseArrayLiteral()
 	case "-", "!", "+", "++", "--":
 		return p.parsePrefixExpr()
-
 	default:
 		p.errorf("unexpected operator: %s", p.cur.Lexeme)
 		return nil
@@ -334,7 +336,9 @@ func (p *Parser) parseIndex(left Expr) Expr {
 func (p *Parser) parseTernary(cond Expr) Expr {
 	p.advanceToken() // consume '?'
 
-	trueExpr := p.parseExpression(LOWEST)
+	// Analisa a expressão verdadeira com precedência um pouco maior que TERNARY
+	// para evitar que ":" seja interpretado como operador infixo
+	trueExpr := p.parseExpression(TERNARY + 1)
 	if trueExpr == nil {
 		p.errorf("expected expression after '?'")
 		return nil
@@ -346,6 +350,7 @@ func (p *Parser) parseTernary(cond Expr) Expr {
 	}
 	p.advanceToken() // consume ':'
 
+	// Analisa a expressão falsa com precedência TERNARY (ou menor)
 	falseExpr := p.parseExpression(TERNARY)
 	if falseExpr == nil {
 		p.errorf("expected expression after ':' in ternary")
@@ -569,18 +574,4 @@ func (p *Parser) parseArrayElements() []Expr {
 		}
 	}
 	return elements
-}
-
-func (p *Parser) parseFunctionExpr() Expr {
-	returnType := p.parseType()
-	if !p.expectAndConsume("function") {
-		return nil
-	}
-	params := p.parseFunctionParameters()
-	body := p.parseFunctionBody()
-	return &FunctionExpr{
-		ReturnType: returnType,
-		Params:     params,
-		Body:       body,
-	}
 }
