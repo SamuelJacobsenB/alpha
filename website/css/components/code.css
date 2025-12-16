@@ -1,77 +1,128 @@
+@import url("https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&display=swap");
+
 .code-section {
-  background-color: rgb(244, 244, 244);
-  color: #f8f8f2;
-  width: clamp(300px, 80%, 800px);
+  background-color: white;
+  color: #333;
+  width: clamp(300px, 80%, 900px);
   border-radius: 1rem;
-  padding-bottom: 1rem;
   overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--border-color);
+  margin: 0 auto;
 }
 
 .code-section > .code-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: #e2e8f0;
+  background-color: #f7f7f7;
   font-size: 0.9rem;
   font-weight: lighter;
   width: 100%;
   padding: 0.8rem 1.2rem;
-
-  .title {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-
-    .circles {
-      display: flex;
-      gap: 0.4rem;
-
-      .circle {
-        width: 0.8rem;
-        height: 0.8rem;
-        border-radius: 50%;
-      }
-
-      .red {
-        background-color: #ff5f56;
-      }
-
-      .yellow {
-        background-color: #ffbd2e;
-      }
-
-      .green {
-        background-color: #27c93f;
-      }
-    }
-
-    small {
-      font-size: 0.9rem;
-      color: #ff3131;
-    }
-
-    small.code-title {
-      color: #333;
-    }
-  }
+  border-bottom: 1px solid var(--border-color);
 }
 
-.code-section > .code-content {
+.code-section .code-header .title {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin: 0 1rem;
+  align-items: center;
+  gap: 1rem;
+}
 
-  code,
-  .output {
-    flex: 1;
-    background-color: white;
-    color: #333;
-    font-family: "Fira Code", monospace;
-    font-size: 1rem;
-    line-height: 1.5;
-    padding: 1rem;
-    border: none;
-    overflow: auto;
+.code-section .code-header .title .circles {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.code-section .code-header .title .circles .circle {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+}
+
+.code-section .code-header .title .circles .red {
+  background-color: #ff5f56;
+}
+.code-section .code-header .title .circles .yellow {
+  background-color: #ffbd2e;
+}
+.code-section .code-header .title .circles .green {
+  background-color: #27c93f;
+}
+
+.code-section .code-header .title small {
+  font-size: 0.9rem;
+  color: #999;
+  font-family: "Fira Code", monospace;
+}
+
+.code-section .code-header .title small.code-title {
+  color: #333;
+  font-weight: 500;
+}
+
+.code-section .code-content {
+  padding: 0;
+  display: flex;
+  width: 100%;
+  height: 380px;
+}
+
+.code-section .code-content code {
+  flex: 1.5;
+  display: block;
+  min-width: 50%;
+  height: 100%;
+  padding: 1.5rem 1.2rem;
+  overflow-y: auto;
+  border-right: 1px solid #ddd;
+  background-color: white;
+  font-family: "Fira Code", monospace;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: #333;
+}
+
+.code-section .code-content code span.keyword {
+  color: #a42a8a; /* Roxo */
+}
+.code-section .code-content code span.string {
+  color: #032f62; /* Azul escuro */
+}
+.code-section .code-content code span.variable {
+  color: #2e8b57; /* Verde */
+}
+.code-section .code-content code span.comment {
+  color: #888; /* Cinza */
+}
+
+.code-section .code-content .output {
+  flex: 1;
+  min-width: 30%;
+  height: 100%;
+  padding: 1.5rem 1.2rem;
+  background-color: #f0f0f0;
+  border: none;
+  color: #333;
+  font-family: "Fira Code", monospace;
+  font-size: 0.9rem;
+  resize: none;
+  overflow-y: auto;
+}
+
+@media (max-width: 800px) {
+  .code-section .code-content {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .code-section .code-content code {
+    border-right: none;
+    border-bottom: 1px solid #ddd;
+    min-height: 200px;
+  }
+
+  .code-section .code-content .output {
+    min-height: 150px;
   }
 }

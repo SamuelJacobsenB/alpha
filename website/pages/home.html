@@ -20,7 +20,7 @@
       <a href="home.html" class="logo" aria-label="Alpha - Homepage">
         <img
           src="../assets/images/logo.png"
-          alt="Logo Alpha"
+          alt="Alpha Logo"
           width="40"
           height="40"
         />
@@ -37,20 +37,26 @@
         </ul>
       </nav>
 
-      <button class="btn btn-primary start" aria-label="Start">Start</button>
+      <button class="btn btn-primary start" aria-label="Get Started">
+        Start
+      </button>
 
-      <button class="btn-primary burguer" id="burguer" aria-label="Open menu">
-        <span class="line"></span>
-        <span class="line"></span>
-        <span class="line"></span>
+      <button
+        class="btn-primary burguer"
+        id="burguer"
+        aria-controls="menu"
+        aria-expanded="false"
+      >
+        <span class="line"></span><span class="line"></span
+        ><span class="line"></span>
       </button>
     </header>
 
     <main>
       <section class="main-content">
-        <span class="version">Version 1.0.0</span>
+        <small class="version">v1.0.0 Alpha Release</small>
         <h1>Alpha: Modernity and Productivity in One Language</h1>
-        <h2>A typed, fast, and expressive language for modern development.</h2>
+        <p>A typed, fast, and expressive language for modern development.</p>
         <div class="buttons">
           <a href="download.html" class="btn btn-primary">Download Now</a>
           <a href="documentation.html" class="btn btn-gray"
@@ -77,12 +83,14 @@
         </div>
 
         <div class="code-content">
-          <code>
-            package main <br /><br />
-            import alpha.console <br /><br />
-            void function main() { <br />
-            &nbsp;&nbsp;var nome = "Alpha" <br /><br />
-            &nbsp;&nbsp;console.log("Hello " + nome) <br />
+          <code class="code-area">
+            <span class="keyword">package</span> main <br /><br />
+            <span class="keyword">import</span> alpha.console <br /><br />
+            <span class="keyword">func</span> main() { <br />
+            &nbsp;&nbsp;<span class="keyword">let</span> name =
+            <span class="string">"Alpha"</span> <br /><br />
+            &nbsp;&nbsp;console.log(<span class="string">"Hello "</span> + name)
+            <br />
             }
           </code>
           <textarea
@@ -90,7 +98,51 @@
             placeholder="Output will be displayed here..."
             readonly
             disabled
-          ></textarea>
+          >
+Output: Hello Alpha</textarea
+          >
+        </div>
+      </section>
+
+      <section class="features-section">
+        <h2>Key Features</h2>
+        <p class="features-description">
+          Designed for performance, safety, and productivity.
+        </p>
+
+        <div class="features-grid">
+          <div class="feature-card">
+            <span class="feature-icon"
+              ><ion-icon name="flash-outline"></ion-icon
+            ></span>
+            <h3>Native Speed</h3>
+            <p>
+              Compiles directly to machine code, providing exceptional runtime
+              performance comparable to C/C++.
+            </p>
+          </div>
+
+          <div class="feature-card">
+            <span class="feature-icon"
+              ><ion-icon name="color-filter-outline"></ion-icon
+            ></span>
+            <h3>Modern Syntax</h3>
+            <p>
+              Enjoy a clean, expressive, and easy-to-read syntax, making
+              development a pleasant experience.
+            </p>
+          </div>
+
+          <div class="feature-card">
+            <span class="feature-icon"
+              ><ion-icon name="git-branch-outline"></ion-icon
+            ></span>
+            <h3>Built-in Concurrency</h3>
+            <p>
+              Use native lightweight threads (goroutine-style) to facilitate
+              parallel and asynchronous programming.
+            </p>
+          </div>
         </div>
       </section>
     </main>
@@ -112,5 +164,13 @@
 
     <script src="../js/header.js"></script>
     <script src="../js/home.js"></script>
+    <script
+      type="module"
+      src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"
+    ></script>
+    <script
+      nomodule
+      src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"
+    ></script>
   </body>
 </html>

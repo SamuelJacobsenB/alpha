@@ -2,11 +2,21 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Download Alpha</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Alpha - Download</title>
+
     <link rel="stylesheet" href="../css/main.css" />
     <link rel="stylesheet" href="../css/components/header.css" />
     <link rel="stylesheet" href="../css/components/footer.css" />
     <link rel="stylesheet" href="../css/pages/download.css" />
+    <script
+      type="module"
+      src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"
+    ></script>
+    <script
+      nomodule
+      src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"
+    ></script>
   </head>
   <body>
     <header>
@@ -41,61 +51,51 @@
       </button>
     </header>
 
-    <main>
-      <section class="download-header">
-        <h1>Install Alpha</h1>
-        <p>
-          The latest version <strong>1.0.0</strong> is ready for production.
-        </p>
-      </section>
+    <main class="download-container">
+      <h1>Download Alpha v1.0.0</h1>
+      <p class="description">
+        Get the native installer for your operating system or use the package
+        manager for command-line installation.
+      </p>
 
-      <section class="download-grid">
+      <section class="os-cards">
         <div class="os-card">
-          <span class="os-icon">🪟</span>
-          <h3>Windows</h3>
-          <p>Windows 10/11 (x64)</p>
-          <br />
+          <span class="os-icon"><ion-icon name="logo-windows"></ion-icon></span>
+          <div class="os-title">Windows</div>
+          <p>64-bit Installer</p>
           <a href="#" class="btn btn-primary">Download .msi</a>
-          <br />
-          <span class="version-badge">v1.0.0</span>
+          <small class="version-tag">v1.0.0</small>
         </div>
 
         <div class="os-card">
-          <span class="os-icon">🍎</span>
-          <h3>macOS</h3>
+          <span class="os-icon"><ion-icon name="logo-apple"></ion-icon></span>
+          <div class="os-title">macOS</div>
           <p>Apple Silicon & Intel</p>
-          <br />
           <a href="#" class="btn btn-gray">Download .pkg</a>
-          <br />
-          <span class="version-badge">v1.0.0</span>
+          <small class="version-tag">v1.0.0</small>
         </div>
 
         <div class="os-card">
-          <span class="os-icon">🐧</span>
-          <h3>Linux</h3>
-          <p>Ubuntu / Debian / Fedora</p>
-          <br />
-          <a href="#" class="btn btn-gray">Download .tar.gz</a>
-          <br />
-          <span class="version-badge">v1.0.0</span>
+          <span class="os-icon"><ion-icon name="logo-tux"></ion-icon></span>
+          <div class="os-title">Linux</div>
+          <p>Debian / Ubuntu</p>
+          <a href="#" class="btn btn-gray">Download .deb</a>
+          <small class="version-tag">v1.0.0</small>
         </div>
       </section>
 
-      <section class="terminal-install">
-        <h3>Quick Install (Unix/Mac)</h3>
-        <p style="color: #aaa; font-size: 0.9rem">
-          Install the latest stable release via command line.
-        </p>
-        <div class="cmd-box">
-          <span>curl -s https://get.alpha-lang.org | bash</span>
-          <button class="cmd-copy" title="Copy">📋</button>
+      <section class="terminal-install-section">
+        <h3>Quick Installation (Linux / macOS)</h3>
+        <p>Use the quick installation script via terminal:</p>
+        <div class="terminal-install-code">
+          curl -s https://get.alpha-lang.org | bash
         </div>
       </section>
     </main>
 
     <footer>
       <div class="footer-content">
-        <p class="copyright">&copy; 2024 Alpha Language.</p>
+        <p class="copyright">&copy; 2025 Alpha Language. Open Source.</p>
       </div>
     </footer>
     <script src="../js/header.js"></script>

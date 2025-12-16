@@ -1,37 +1,84 @@
-.examples-intro {
-  text-align: center;
-  max-width: 700px;
-  margin: 0 auto 3rem auto;
+/* Layout Semelhante à Documentação */
+.examples-layout {
+  display: grid;
+  grid-template-columns: 250px 1fr;
+  gap: 3rem;
+  align-items: start;
 }
 
-.example-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 4rem;
+/* Sidebar Navigation (Baseado em docs-sidebar) */
+.examples-sidebar {
+  position: sticky;
+  top: 100px;
+  height: calc(100vh - 140px);
+  overflow-y: auto;
+  border-right: 1px solid var(--border-color);
+  padding-right: 1rem;
 }
 
-.example-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.example-text {
-  text-align: center;
-  margin-bottom: 1.5rem;
-  max-width: 600px;
-}
-
-.example-text h3 {
-  font-size: 1.5rem;
+.examples-sidebar h4 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 1.5rem;
   margin-bottom: 0.5rem;
-  color: var(--text-color);
+  letter-spacing: 0.05em;
 }
 
-/* Modificação para o code-section encaixar melhor */
-.example-item .code-section {
-  width: 100%;
+.examples-sidebar ul {
+  list-style: none;
+}
+
+.examples-sidebar a {
+  display: block;
+  text-decoration: none;
+  color: var(--text-color);
+  padding: 0.4rem 0;
+  font-size: 0.95rem;
+  transition: color 0.2s;
+}
+
+.examples-sidebar a:hover,
+.examples-sidebar a.active {
+  color: var(--primary-color);
+  font-weight: 500;
+}
+
+/* Conteúdo Principal dos Exemplos */
+.examples-content {
   max-width: 800px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1),
-    0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.examples-content h1 {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+}
+
+.example-block {
+  margin-bottom: 3rem;
+}
+
+.example-block h2 {
+  font-size: 1.8rem;
+  margin-top: 2.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.example-block p.example-desc {
+  margin-bottom: 1.5rem;
+  color: #4a5568;
+}
+
+/* Garante que a Code Section se ajuste bem */
+.example-block .code-section {
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .examples-layout {
+    grid-template-columns: 1fr;
+  }
+  .examples-sidebar {
+    display: none;
+  }
 }

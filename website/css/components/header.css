@@ -1,16 +1,25 @@
 /* Header */
 header {
   position: sticky;
-  z-index: 10;
   top: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 10px;
-  background-color: white;
+
+  background-color: transparent;
+  box-shadow: none;
+
   width: 100%;
   height: 80px;
   padding: 3rem 2rem;
+  z-index: 1000;
+
+  transition: background-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+}
+
+header.scrolled {
+  background-color: white;
   box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
 }
 

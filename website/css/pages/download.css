@@ -1,82 +1,98 @@
-.download-header {
+/* Container Principal */
+.download-container {
+  max-width: 1000px;
+  margin: 4rem auto;
+  padding: 0 2rem;
   text-align: center;
-  margin-bottom: 4rem;
 }
 
-.download-header h1 {
-  font-size: 3rem;
-  margin-bottom: 1rem;
+/* Título e Subtítulo */
+.download-container h1 {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
 }
 
-.download-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+.download-container p.description {
+  color: var(--text-muted); /* Usando variável do main.css */
+  font-size: 1.1rem;
+  margin-bottom: 3rem;
+}
+
+/* Cards de Sistemas Operacionais */
+.os-cards {
+  display: flex;
+  justify-content: center;
   gap: 2rem;
-  margin-bottom: 4rem;
+  flex-wrap: wrap;
 }
 
 .os-card {
   background: white;
-  border: 1px solid var(--border-color);
+  padding: 2.5rem 2rem;
   border-radius: 1rem;
-  padding: 2rem;
+  border: 1px solid var(--border-color); /* Usando variável do main.css */
   text-align: center;
-  transition: transform 0.3s, box-shadow 0.3s;
+  width: 300px;
+  box-shadow: 0 8px 15px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
 }
 
 .os-card:hover {
   transform: translateY(-5px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
   border-color: var(--primary-color);
 }
 
 .os-icon {
-  font-size: 2.5rem;
+  font-size: 3.5rem;
+  color: var(--primary-color);
   margin-bottom: 1rem;
-  display: block;
 }
 
-.version-badge {
-  background: #edf2f7;
-  color: #4a5568;
-  padding: 0.25rem 0.75rem;
-  border-radius: 99px;
-  font-size: 0.8rem;
-  font-weight: bold;
-  margin-top: 1rem;
+.os-title {
+  font-size: 1.6rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-color);
+  font-weight: 600;
+}
+
+.os-card p {
+  color: var(--text-muted);
+  margin-bottom: 2rem;
+}
+
+.version-tag {
+  background: #f0f0f0;
+  color: #666;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
   display: inline-block;
+  margin-top: 1.5rem;
 }
 
-/* Terminal Section */
-.terminal-install {
-  background: #1e1e1e;
-  color: white;
+/* Instalação via Terminal */
+.terminal-install-section {
+  margin-top: 5rem;
   padding: 2rem;
+  background-color: #f7f7f7;
   border-radius: 1rem;
-  max-width: 700px;
-  margin: 0 auto;
-  text-align: center;
 }
 
-.cmd-box {
-  background: #2d2d2d;
+.terminal-install-section h3 {
+  margin-bottom: 1rem;
+  font-size: 1.4rem;
+}
+
+.terminal-install-code {
+  background: #333; /* Dark Mode para o código */
+  color: #fff;
   padding: 1rem;
   border-radius: 0.5rem;
-  font-family: var(--font-mono);
+  display: inline-block;
   margin-top: 1rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border: 1px solid #444;
-}
-
-.cmd-copy {
-  background: transparent;
-  border: none;
-  color: #888;
-  cursor: pointer;
-  font-size: 1.2rem;
-}
-.cmd-copy:hover {
-  color: white;
+  font-family: "Fira Code", monospace; /* Fonte monoespaçada */
+  font-size: 0.95rem;
+  overflow-x: auto; /* Para garantir que o código longo não quebre o layout */
+  max-width: 100%;
 }

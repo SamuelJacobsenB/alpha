@@ -1,36 +1,32 @@
-document.addEventListener("DOMContentLoaded", () => {
-  const burger = document.getElementById("burguer");
-  const nav = document.getElementById("menu");
-  const header = document.querySelector("header");
+const header = document.querySelector("header"); // Novo: Pega o elemento header
+const menu = document.querySelector("#menu");
+const burguer = document.querySelector("#burguer");
 
-  if (burger && nav) {
-    burger.addEventListener("click", () => {
-      // Alterna classes para animação do ícone e visibilidade do menu
-      burger.classList.toggle("open");
-      nav.classList.toggle("open");
+// Função para gerenciar o scroll
+function handleScroll() {
+  const scrollThreshold = 50;
 
-      // Impede rolagem do corpo quando menu está aberto (opcional)
-      document.body.style.overflow = nav.classList.contains("open")
-        ? "hidden"
-        : "auto";
-    });
+  if (window.scrollY > scrollThreshold) {
+    header.classList.add("scrolled");
+  } else {
+    header.classList.remove("scrolled");
   }
+}
 
-  // Fecha o menu ao clicar em um link
-  nav.querySelectorAll("a").forEach((link) => {
-    link.addEventListener("click", () => {
-      burger.classList.remove("open");
-      nav.classList.remove("open");
-      document.body.style.overflow = "auto";
-    });
-  });
+// Listener de scroll e chama no carregamento
+window.addEventListener("scroll", handleScroll);
+window.addEventListener("load", handleScroll);
 
-  // Efeito de sombra no header ao rolar
-  window.addEventListener("scroll", () => {
-    if (window.scrollY > 10) {
-      header.style.boxShadow = "0 4px 6px -1px rgba(0, 0, 0, 0.1)";
-    } else {
-      header.style.boxShadow = "2px 2px 4px rgba(0, 0, 0, 0.1)";
-    }
-  });
+// Lógica do menu hamburguer
+burguer.addEventListener("click", () => {
+  const expanded = menu.classList.contains("open");
+  if (expanded) {
+    menu.classList.remove("open");
+    burguer.classList.remove("open");
+    burguer.setAttribute("aria-expanded", "false");
+  } else {
+    menu.classList.add("open");
+    burguer.classList.add("open");
+    burguer.setAttribute("aria-expanded", "true");
+  }
 });

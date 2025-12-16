@@ -3,13 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Alpha - Examples</title>
+    <title>Examples - Alpha Language</title>
+
     <link rel="stylesheet" href="../css/main.css" />
     <link rel="stylesheet" href="../css/components/header.css" />
-    <link rel="stylesheet" href="../css/components/code.css" />
     <link rel="stylesheet" href="../css/components/footer.css" />
-    <link rel="stylesheet" href="../css/pages/examples.css">
-    </style>
+    <link rel="stylesheet" href="../css/components/code.css" />
+    <link rel="stylesheet" href="../css/pages/examples.css" />
+    <script
+      type="module"
+      src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"
+    ></script>
+    <script
+      nomodule
+      src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"
+    ></script>
   </head>
   <body>
     <header>
@@ -28,7 +36,9 @@
           <li><a href="documentation.html">Documentation</a></li>
           <li><a href="download.html">Download</a></li>
           <li>
-            <a href="examples.html" style="color: black; font-weight: bold"
+            <a
+              href="examples.html"
+              style="color: var(--primary-color); font-weight: bold"
               >Examples</a
             >
           </li>
@@ -42,74 +52,163 @@
       </button>
     </header>
 
-    <main class="examples-container">
-      <h1>Code Examples</h1>
+    <main class="examples-layout">
+      <aside class="examples-sidebar">
+        <h4>Basic</h4>
+        <ul>
+          <li><a href="#hello" class="active">Hello World</a></li>
+          <li><a href="#fibonacci">Recursive Fibonacci</a></li>
+        </ul>
 
-      <div class="example-block">
-        <h3>Simple HTTP Server</h3>
-        <p class="example-desc">
-          Create a web server in just a few lines of code using the standard
-          library.
+        <h4>Standard Library</h4>
+        <ul>
+          <li><a href="#net-server">HTTP Server</a></li>
+          <li><a href="#json-parse">JSON Parsing</a></li>
+        </ul>
+
+        <h4>Concurrency</h4>
+        <ul>
+          <li><a href="#threads">Simple Threading</a></li>
+        </ul>
+      </aside>
+
+      <article class="examples-content">
+        <h1>Code Examples</h1>
+        <p>
+          A collection of practical examples illustrating the power and modern
+          syntax of Alpha.
         </p>
 
-        <section class="code-section">
-          <div class="code-header">
-            <div class="title">
-              <div class="circles">
-                <span class="circle red"></span
-                ><span class="circle yellow"></span
-                ><span class="circle green"></span>
+        <div class="example-block">
+          <h2 id="hello">Hello World</h2>
+          <p class="example-desc">
+            The classic program demonstrating Alpha's basic structure.
+          </p>
+
+          <section class="code-section">
+            <div class="code-header">
+              <div class="title">
+                <div class="circles">
+                  <span class="circle red"></span
+                  ><span class="circle yellow"></span
+                  ><span class="circle green"></span>
+                </div>
+                <small>main.al</small>
               </div>
-              <small>server.al</small>
             </div>
-          </div>
-          <div class="code-content">
-            <code>
-              import alpha.net.http <br /><br />
+            <div class="code-content">
+              <code class="code-area">
+                <span class="keyword">package</span> main <br /><br />
+                <span class="keyword">import</span> alpha.io <br /><br />
+                <span class="keyword">func</span> main() { <br />
+                &nbsp;&nbsp;io.println(<span class="string"
+                  >"Hello, Alpha!"</span
+                >) <br />
+                }
+              </code>
+              <textarea
+                class="output"
+                readonly
+                disabled
+                placeholder="Output: Hello, Alpha!"
+              >
+Output: Hello, Alpha!</textarea
+              >
+            </div>
+          </section>
+        </div>
 
-              func main() { <br />
-              &nbsp;&nbsp;var server = http.newServer(8080) <br /><br />
+        <div class="example-block">
+          <h2 id="fibonacci">Recursive Fibonacci</h2>
+          <p class="example-desc">
+            Demonstration of functions and control structures with recursion.
+          </p>
 
-              &nbsp;&nbsp;server.handle("/", (req, res) => { <br />
-              &nbsp;&nbsp;&nbsp;&nbsp;res.send("Welcome to Alpha!") <br />
-              &nbsp;&nbsp;}) <br /><br />
-
-              &nbsp;&nbsp;server.start() <br />
-              }
-            </code>
-          </div>
-        </section>
-      </div>
-
-      <div class="example-block">
-        <h3>Recursive Fibonacci</h3>
-        <p class="example-desc">
-          Demonstrating recursion and type definitions.
-        </p>
-
-        <section class="code-section">
-          <div class="code-header">
-            <div class="title">
-              <div class="circles">
-                <span class="circle red"></span
-                ><span class="circle yellow"></span
-                ><span class="circle green"></span>
+          <section class="code-section">
+            <div class="code-header">
+              <div class="title">
+                <div class="circles">
+                  <span class="circle red"></span
+                  ><span class="circle yellow"></span
+                  ><span class="circle green"></span>
+                </div>
+                <small>math.al</small>
               </div>
-              <small>math.al</small>
             </div>
-          </div>
-          <div class="code-content">
-            <code>
-              func fib(n: int) -> int { <br />
-              &nbsp;&nbsp;if (n <= 1) return n <br />
-              &nbsp;&nbsp;return fib(n - 1) + fib(n - 2) <br />
-              } <br /><br />
+            <div class="code-content">
+              <code class="code-area">
+                <span class="keyword">func</span> fib(n:
+                <span class="variable">int</span>) ->
+                <span class="variable">int</span> { <br />
+                &nbsp;&nbsp;<span class="keyword">if</span> (n <= 1)
+                <span class="keyword">return</span> n <br />
+                &nbsp;&nbsp;<span class="keyword">return</span> fib(n - 1) +
+                fib(n - 2) <br />
+                } <br /><br />
+                <span class="keyword">func</span> main() {<br />
+                &nbsp;&nbsp;io.println(fib(10))
+                <span class="comment">// Output: 55</span><br />
+                }
+              </code>
+              <textarea
+                class="output"
+                readonly
+                disabled
+                placeholder="Output: 55"
+              >
+Output: 55</textarea
+              >
+            </div>
+          </section>
+        </div>
 
-              print(fib(10)) // Output: 55
-            </code>
-          </div>
-        </section>
-      </div>
+        <div class="example-block">
+          <h2 id="net-server">Minimal HTTP Server</h2>
+          <p class="example-desc">
+            Build a high-performance web server using the `alpha.net` library.
+          </p>
+
+          <section class="code-section">
+            <div class="code-header">
+              <div class="title">
+                <div class="circles">
+                  <span class="circle red"></span
+                  ><span class="circle yellow"></span
+                  ><span class="circle green"></span>
+                </div>
+                <small>server.al</small>
+              </div>
+            </div>
+            <div class="code-content">
+              <code class="code-area">
+                <span class="keyword">import</span> alpha.net <br /><br />
+                <span class="keyword">func</span> handler(req:
+                <span class="variable">Request</span>, res:
+                <span class="variable">Response</span>) { <br />
+                &nbsp;&nbsp;res.status(200).send(<span class="string"
+                  >"Alpha Server is running!"</span
+                >) <br />
+                } <br /><br />
+                <span class="keyword">func</span> main() { <br />
+                &nbsp;&nbsp;<span class="keyword">let</span> server =
+                net.NewServer(<span class="string">":8080"</span>) <br />
+                &nbsp;&nbsp;server.route(<span class="string">"/"</span>,
+                handler) <br />
+                &nbsp;&nbsp;server.listen() <br />
+                }
+              </code>
+              <textarea
+                class="output"
+                readonly
+                disabled
+                placeholder="Console: Server listening on :8080"
+              >
+Console: Server listening on :8080</textarea
+              >
+            </div>
+          </section>
+        </div>
+      </article>
     </main>
 
     <footer>

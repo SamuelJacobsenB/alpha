@@ -2,11 +2,21 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Alpha Community</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Alpha - Community</title>
+
     <link rel="stylesheet" href="../css/main.css" />
     <link rel="stylesheet" href="../css/components/header.css" />
     <link rel="stylesheet" href="../css/components/footer.css" />
     <link rel="stylesheet" href="../css/pages/community.css" />
+    <script
+      type="module"
+      src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"
+    ></script>
+    <script
+      nomodule
+      src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"
+    ></script>
   </head>
   <body>
     <header>
@@ -43,60 +53,55 @@
 
     <main>
       <section class="community-hero">
-        <h1>Join 50,000+ Developers</h1>
+        <h1>Join the Alpha Community</h1>
         <p>
-          Alpha is open-source and community driven. Help us build the future.
+          Connect with other Alpha developers, contribute to the source code,
+          and share your projects. Our ecosystem is built by and for you!
         </p>
       </section>
 
-      <section class="community-grid">
+      <section class="community-links">
         <div class="comm-card">
-          <div>
-            <h3>GitHub</h3>
-            <p>
-              Contribute to the compiler core, report issues, or explore the
-              source code.
-            </p>
-            <div class="stats">
-              <span>⭐ 12k Stars</span>
-              <span>🔄 400 Forks</span>
-            </div>
-          </div>
-          <a href="#" class="btn btn-gray">View Repository</a>
+          <span class="comm-icon"
+            ><ion-icon name="logo-github"></ion-icon
+          ></span>
+          <h3>GitHub</h3>
+          <p>
+            Report bugs, request new features, and contribute to the compiler
+            and libraries.
+          </p>
+          <a href="#" class="btn btn-gray">View Source Code</a>
         </div>
 
         <div class="comm-card">
-          <div>
-            <h3>Discord Server</h3>
-            <p>Real-time discussions, Q&A, and showcasing your projects.</p>
-            <div class="stats">
-              <span>🟢 2,400 Online</span>
-            </div>
-          </div>
-          <a
-            href="#"
-            class="btn btn-primary"
-            style="background-color: #5865f2; border-color: #5865f2"
-            >Join Discord</a
-          >
+          <span class="comm-icon"
+            ><ion-icon name="logo-discord"></ion-icon
+          ></span>
+          <h3>Discord</h3>
+          <p>
+            Chat with the development team and other community members in
+            real-time.
+          </p>
+          <a href="#" class="btn btn-primary">Join Server</a>
         </div>
 
         <div class="comm-card">
-          <div>
-            <h3>Discourse Forum</h3>
-            <p>
-              Long-term discussions, RFCs for new language features, and
-              tutorials.
-            </p>
-          </div>
-          <a href="#" class="btn btn-gray">Read Topics</a>
+          <span class="comm-icon"
+            ><ion-icon name="chatbubbles-outline"></ion-icon
+          ></span>
+          <h3>Official Forum</h3>
+          <p>
+            Long-form discussions, detailed tutorials, announcements, and
+            project sharing.
+          </p>
+          <a href="#" class="btn btn-gray">Visit Forum</a>
         </div>
       </section>
     </main>
 
     <footer>
       <div class="footer-content">
-        <p class="copyright">&copy; 2024 Alpha Language.</p>
+        <p class="copyright">&copy; 2025 Alpha Language. Open Source.</p>
       </div>
     </footer>
     <script src="../js/header.js"></script>

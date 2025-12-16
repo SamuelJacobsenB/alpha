@@ -1,51 +1,69 @@
+/* Seção de Destaque (Hero) */
 .community-hero {
   text-align: center;
-  padding: 3rem 1rem;
-  background: white;
-  border-radius: 1rem;
-  margin-bottom: 3rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  padding: 4rem 2rem;
+  background-color: #f8f9fa; /* Fundo cinza claro */
+  border-bottom: 1px solid var(--border-color);
 }
 
-.community-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+.community-hero h1 {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.community-hero p {
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+/* Seção de Links (Cards) */
+.community-links {
+  display: flex;
+  justify-content: center;
   gap: 2rem;
+  flex-wrap: wrap;
+  max-width: 1200px;
+  /* Posiciona os cards mais acima, invadindo o espaço do hero */
+  margin: -3rem auto 4rem auto;
+  padding: 0 2rem;
 }
 
 .comm-card {
   background: white;
-  padding: 2rem;
+  padding: 2.5rem;
   border-radius: 1rem;
   border: 1px solid var(--border-color);
+  width: 300px;
+  text-align: center;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  height: 100%;
-  transition: all 0.3s ease;
+  align-items: center;
+  gap: 1rem;
+  transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
 }
 
 .comm-card:hover {
   transform: translateY(-5px);
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
   border-color: var(--primary-color);
 }
 
+.comm-icon {
+  font-size: 3rem;
+  color: var(--primary-color);
+  margin-bottom: 0.5rem;
+}
+
 .comm-card h3 {
-  font-size: 1.5rem;
-  margin-bottom: 1rem;
+  font-size: 1.6rem;
+  margin-bottom: 0.2rem;
 }
 
 .comm-card p {
   color: var(--text-muted);
-  margin-bottom: 2rem;
-  flex-grow: 1;
-}
-
-.stats {
-  display: flex;
-  gap: 1rem;
-  font-size: 0.85rem;
-  color: var(--text-muted);
+  flex-grow: 1; /* Garante que os parágrafos tenham a mesma altura */
   margin-bottom: 1.5rem;
-  font-weight: bold;
 }
