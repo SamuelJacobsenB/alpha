@@ -131,6 +131,15 @@ type GenericParam struct {
 func (g *GenericParam) typeNode() {}
 func (g *GenericParam) nodePos()  {}
 
+type GenericCallExpr struct {
+	Callee   Expr
+	TypeArgs []Type
+	Args     []Expr
+}
+
+func (g *GenericCallExpr) exprNode() {}
+func (g *GenericCallExpr) nodePos()  {}
+
 type Param struct {
 	Name string
 	Type Type

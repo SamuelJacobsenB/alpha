@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/alpha/internal/lexer"
 )
@@ -15,9 +16,9 @@ type Parser struct {
 }
 
 func New(sc *lexer.Scanner) *Parser {
-	p := &Parser{sc: sc, Errors: []string{}}
-	p.advanceToken()
-	p.advanceToken()
+	p := &Parser{sc: sc}
+	p.advanceToken() // Carrega primeiro token em cur
+	p.advanceToken() // Carrega segundo token em nxt
 	return p
 }
 
@@ -40,9 +41,15 @@ func (p *Parser) ParseProgram() *Program {
 	body := make([]Stmt, 0, 10)
 
 	for p.cur.Type != lexer.EOF {
-		if stmt := p.parseTopLevel(); stmt != nil {
+		stmt := p.parseTopLevel()
+		if stmt != nil {
 			body = append(body, stmt)
 		} else {
+			// Evita loop infinito quando não consegue parsear
+			if p.cur.Type == lexer.EOF {
+				break
+			}
+			// Tenta sincronizar avançando um token
 			p.advanceToken()
 		}
 	}
@@ -51,14 +58,18 @@ func (p *Parser) ParseProgram() *Program {
 }
 
 func (p *Parser) parseNumberToken(tok lexer.Token) Expr {
+	var expr Expr
+
 	if tok.Type == lexer.INT {
-		v, _ := strconv.ParseInt(tok.Value, 10, 64)
-		p.advanceToken()
-		return &IntLiteral{Value: v}
+		val, _ := strconv.ParseInt(tok.Value, 10, 64)
+		expr = &IntLiteral{Value: val}
+	} else {
+		val, _ := strconv.ParseFloat(tok.Value, 64)
+		expr = &FloatLiteral{Value: val}
 	}
-	f, _ := strconv.ParseFloat(tok.Value, 64)
+
 	p.advanceToken()
-	return &FloatLiteral{Value: f}
+	return expr
 }
 
 func (p *Parser) expectAndConsume(expected string) bool {
@@ -71,8 +82,7 @@ func (p *Parser) expectAndConsume(expected string) bool {
 }
 
 func (p *Parser) isAtEndOfStatement() bool {
-	return p.cur.Lexeme == ";" || p.cur.Lexeme == "}" ||
-		p.cur.Type == lexer.EOF || p.cur.Lexeme == ")"
+	return p.cur.Lexeme == ";" || p.cur.Lexeme == "}" || p.cur.Type == lexer.EOF
 }
 
 func (p *Parser) syncToNextStmt() {
@@ -82,9 +92,11 @@ func (p *Parser) syncToNextStmt() {
 }
 
 func (p *Parser) isAtStmtStart() bool {
-	return p.cur.Lexeme == ";" || p.cur.Lexeme == "}" ||
-		p.cur.Type == lexer.KEYWORD || isTypeKeyword(p.cur.Lexeme) ||
-		p.cur.Lexeme == "{"
+	return p.cur.Lexeme == ";" ||
+		p.cur.Lexeme == "}" ||
+		p.cur.Type == lexer.KEYWORD ||
+		p.cur.Lexeme == "{" ||
+		isTypeKeyword(p.cur.Lexeme)
 }
 
 func (p *Parser) HasErrors() bool {
@@ -92,12 +104,14 @@ func (p *Parser) HasErrors() bool {
 }
 
 func (p *Parser) ErrorsText() string {
-	if len(p.Errors) == 0 {
-		return ""
+	return strings.Join(p.Errors, "\n")
+}
+
+func (p *Parser) syncTo(token string) {
+	for p.cur.Lexeme != token && p.cur.Type != lexer.EOF {
+		p.advanceToken()
 	}
-	out := ""
-	for _, e := range p.Errors {
-		out += e + "\n"
+	if p.cur.Lexeme == token {
+		p.advanceToken()
 	}
-	return out
 }

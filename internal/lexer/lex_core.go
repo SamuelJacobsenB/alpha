@@ -1,32 +1,26 @@
 package lexer
 
 func (s *Scanner) NextToken() Token {
-	for {
-		s.skipSpaceAndComments()
-		if s.isEOF() {
-			return Token{Type: EOF, Lexeme: "", Line: s.line, Col: s.col}
-		}
+	s.skipSpaceAndComments()
 
-		// marcar início do token e guardar posição humana
-		s.start = s.index
-		s.tokenLine = s.line
-		s.tokenCol = s.col
+	if s.isEOF() {
+		return Token{Type: EOF, Line: s.line, Col: s.col}
+	}
 
-		ch := s.peek(0)
+	s.start = s.index
+	s.tokenLine = s.line
+	s.tokenCol = s.col
 
-		// identificador ou keyword (letters, underscore, digits depois)
-		if isLetter(ch) || ch == '_' {
-			return s.lexIdentifier()
-		}
-		// número
-		if isDigit(ch) {
-			return s.lexNumber()
-		}
-		// string
-		if ch == '"' {
-			return s.lexString()
-		}
-		// operadores / separadores
+	ch := s.peek(0)
+
+	switch {
+	case isLetter(ch) || ch == '_':
+		return s.lexIdentifier()
+	case isDigit(ch):
+		return s.lexNumber()
+	case ch == '"':
+		return s.lexString()
+	default:
 		return s.lexOperator()
 	}
 }
@@ -35,41 +29,43 @@ func (s *Scanner) NextToken() Token {
 func (s *Scanner) skipSpaceAndComments() {
 	for !s.isEOF() {
 		ch := s.peek(0)
-		if ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n' {
+
+		switch {
+		case ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n':
 			s.advance()
-			continue
+		case ch == '/' && s.peek(1) == '/':
+			s.skipLineComment()
+		case ch == '/' && s.peek(1) == '*':
+			s.skipBlockComment()
+		default:
+			return
 		}
+	}
+}
 
-		// // line comment
-		if ch == '/' && s.peek(1) == '/' {
-			// advance "//"
+func (s *Scanner) skipLineComment() {
+	// Avança "//"
+	s.advance()
+	s.advance()
+
+	// Avança até o fim da linha
+	for !s.isEOF() && s.peek(0) != '\n' {
+		s.advance()
+	}
+}
+
+func (s *Scanner) skipBlockComment() {
+	// Avança "/*"
+	s.advance()
+	s.advance()
+
+	for !s.isEOF() {
+		if s.peek(0) == '*' && s.peek(1) == '/' {
+			// Avança "*/"
 			s.advance()
 			s.advance()
-
-			// advance rest of line
-			for !s.isEOF() && s.peek(0) != '\n' {
-				s.advance()
-			}
-			continue
+			return
 		}
-
-		// /* block comment */
-		if ch == '/' && s.peek(1) == '*' {
-			// advance "/*"
-			s.advance()
-			s.advance()
-
-			for !s.isEOF() {
-				if s.peek(0) == '*' && s.peek(1) == '/' {
-					// advance "*/"
-					s.advance()
-					s.advance()
-					break
-				}
-				s.advance()
-			}
-			continue
-		}
-		break
+		s.advance()
 	}
 }

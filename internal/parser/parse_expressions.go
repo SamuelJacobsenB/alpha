@@ -91,6 +91,9 @@ func (p *Parser) parseExpression(precedence int) Expr {
 				return left
 			}
 			left = p.parseTernary(left)
+			if left == nil {
+				return nil
+			}
 			continue
 		}
 
@@ -104,8 +107,7 @@ func (p *Parser) parseExpression(precedence int) Expr {
 
 		// Se não for operador infixo ou a precedência for muito baixa, retorna
 		if !p.isInfixOperator(p.cur) && !p.isPostfixOperator(p.cur) &&
-			curOp != "(" && curOp != "[" && curOp != "." &&
-			!(curOp == "<" && p.isGenericCall()) {
+			curOp != "(" && curOp != "[" && curOp != "." {
 			return left
 		}
 
@@ -123,12 +125,14 @@ func (p *Parser) parseExpression(precedence int) Expr {
 			left = p.parseMemberAccess(left)
 		case p.isInfixOperator(p.cur):
 			left = p.parseInfix(left, curPrec)
-		case curOp == "<" && p.isGenericSpecialization():
-			left = p.parseGenericSpecialization(left)
 		case p.isPostfixOperator(p.cur):
-			left = p.parsePostfix(left, curPrec)
+			left = p.parsePostfix(left)
 		default:
 			return left
+		}
+
+		if left == nil {
+			return nil
 		}
 	}
 }
@@ -138,12 +142,6 @@ func (p *Parser) parsePrimary() Expr {
 	case lexer.IDENT:
 		ident := &Identifier{Name: p.cur.Lexeme}
 		p.advanceToken()
-
-		// Verifica se é uma especialização genérica: ident < T > ( ... )
-		if p.cur.Lexeme == "<" && p.isGenericCall() {
-			return ident
-		}
-
 		return ident
 	case lexer.INT, lexer.FLOAT:
 		return p.parseNumberToken(p.cur)
@@ -178,12 +176,157 @@ func (p *Parser) parseKeywordExpr() Expr {
 	case "this":
 		p.advanceToken()
 		return &ThisExpr{}
+	case "generic":
+		// Tratar chamada genérica: generic<int> identity(...)
+		return p.parseGenericCallOrExpr()
 	default:
 		if isTypeKeyword(p.cur.Lexeme) {
 			return nil
 		}
 		p.errorf("unexpected keyword: %s", p.cur.Lexeme)
 		return nil
+	}
+}
+
+// Função corrigida para parsear argumentos de tipo
+func (p *Parser) parseTypeArguments() []Type {
+	var typeArgs []Type
+
+	// Parse primeiro tipo
+	typ := p.parseType()
+	if typ == nil {
+		return nil
+	}
+	typeArgs = append(typeArgs, typ)
+
+	// Parse tipos adicionais separados por vírgulas
+	for p.cur.Lexeme == "," {
+		p.advanceToken() // consume ','
+
+		typ = p.parseType()
+		if typ == nil {
+			return nil
+		}
+		typeArgs = append(typeArgs, typ)
+	}
+
+	return typeArgs
+}
+
+// Correção na função parseGenericCallOrExpr
+func (p *Parser) parseGenericCallOrExpr() Expr {
+	// Salvar posição do token "generic"
+	p.advanceToken() // consume 'generic'
+
+	// Deve ter < após generic
+	if !p.expectAndConsume("<") {
+		return nil
+	}
+
+	// Parsear argumentos de tipo
+	typeArgs := p.parseTypeArguments()
+	if typeArgs == nil {
+		return nil
+	}
+
+	// Deve ter > para fechar os argumentos de tipo
+	if !p.expectAndConsume(">") {
+		return nil
+	}
+
+	// O próximo deve ser um identificador (para chamada)
+	if p.cur.Type != lexer.IDENT {
+		p.errorf("expected identifier after generic type arguments, got %s", p.cur.Lexeme)
+		return nil
+	}
+
+	// É uma chamada: generic<int> identity(...)
+	ident := &Identifier{Name: p.cur.Lexeme}
+	p.advanceToken()
+
+	// Se tiver parênteses, é uma chamada de função
+	if p.cur.Lexeme == "(" {
+		p.advanceToken() // consume '('
+
+		var args []Expr
+		if p.cur.Lexeme != ")" {
+			args = p.parseArgumentList()
+			if args == nil {
+				return nil
+			}
+		}
+
+		if !p.expectAndConsume(")") {
+			return nil
+		}
+
+		return &GenericCallExpr{
+			Callee:   ident,
+			TypeArgs: typeArgs,
+			Args:     args,
+		}
+	}
+
+	// Se não tem parênteses, é apenas uma referência à função genérica
+	return &GenericCallExpr{
+		Callee:   ident,
+		TypeArgs: typeArgs,
+		Args:     nil,
+	}
+}
+
+// Correção na função parseCall para lidar com GenericCallExpr
+func (p *Parser) parseCall(left Expr) Expr {
+	// Se left for um GenericCallExpr sem args, adicionamos os args
+	if gce, ok := left.(*GenericCallExpr); ok && gce.Args == nil {
+		if p.cur.Lexeme != "(" {
+			p.errorf("expected '(' for function call")
+			return nil
+		}
+
+		p.advanceToken() // consume '('
+
+		var args []Expr
+		if p.cur.Lexeme != ")" {
+			args = p.parseArgumentList()
+			if args == nil {
+				return nil
+			}
+		}
+
+		if !p.expectAndConsume(")") {
+			return nil
+		}
+
+		return &GenericCallExpr{
+			Callee:   gce.Callee,
+			TypeArgs: gce.TypeArgs,
+			Args:     args,
+		}
+	}
+
+	// Chamada normal
+	if p.cur.Lexeme != "(" {
+		return left
+	}
+
+	p.advanceToken() // consume '('
+
+	var args []Expr
+	if p.cur.Lexeme != ")" {
+		args = p.parseArgumentList()
+		if args == nil {
+			return nil
+		}
+	}
+
+	if !p.expectAndConsume(")") {
+		return nil
+	}
+
+	return &CallExpr{
+		Callee: left,
+		Args:   args,
 	}
 }
 
@@ -289,25 +432,10 @@ func (p *Parser) parseInfix(left Expr, precedence int) Expr {
 	return &BinaryExpr{Left: left, Op: op, Right: right}
 }
 
-func (p *Parser) parsePostfix(left Expr, precedence int) Expr {
+func (p *Parser) parsePostfix(left Expr) Expr {
 	op := p.cur.Lexeme
 	p.advanceToken()
 	return &UnaryExpr{Op: op, Expr: left, Postfix: true}
-}
-
-func (p *Parser) parseCall(left Expr) Expr {
-	p.advanceToken()
-	var args []Expr
-	if p.cur.Lexeme != ")" {
-		args = p.parseArgumentList()
-		if args == nil {
-			return nil
-		}
-	}
-	if !p.expectAndConsume(")") {
-		return nil
-	}
-	return &CallExpr{Callee: left, Args: args}
 }
 
 func (p *Parser) parseArgumentList() []Expr {
@@ -396,8 +524,13 @@ func (p *Parser) parseNewExpr() Expr {
 	p.advanceToken()
 
 	var typeArgs []Type
-	if p.cur.Lexeme == "<" {
-		p.advanceToken()
+	if p.cur.Lexeme == "generic" {
+		p.advanceToken() // consume 'generic'
+
+		if !p.expectAndConsume("<") {
+			return nil
+		}
+
 		typeArgs = p.parseTypeArguments()
 		if !p.expectAndConsume(">") {
 			return nil
@@ -422,51 +555,6 @@ func (p *Parser) parseNewExpr() Expr {
 		TypeArgs: typeArgs,
 		Args:     args,
 	}
-}
-
-func (p *Parser) parseTypeArguments() []Type {
-	var typeArgs []Type
-	for {
-		typ := p.parseType()
-		if typ == nil {
-			return nil
-		}
-		typeArgs = append(typeArgs, typ)
-		if p.cur.Lexeme == "," {
-			p.advanceToken()
-		} else {
-			break
-		}
-	}
-	return typeArgs
-}
-
-func (p *Parser) isGenericCall() bool {
-	save := p.cur
-	defer func() { p.cur = save }()
-
-	if p.cur.Lexeme != "<" {
-		return false
-	}
-	p.advanceToken()
-
-	if !isTypeKeyword(p.cur.Lexeme) && p.cur.Type != lexer.IDENT {
-		return false
-	}
-
-	for p.cur.Lexeme != ">" && p.cur.Type != lexer.EOF {
-		if !isTypeKeyword(p.cur.Lexeme) && p.cur.Type != lexer.IDENT && p.cur.Lexeme != "," {
-			return false
-		}
-		p.advanceToken()
-	}
-
-	if p.cur.Lexeme != ">" {
-		return false
-	}
-	p.advanceToken()
-
-	return p.cur.Lexeme == "("
 }
 
 func (p *Parser) isStructLiteral() bool {
@@ -557,80 +645,4 @@ func (p *Parser) parseArrayElements() []Expr {
 		}
 	}
 	return elements
-}
-
-func (p *Parser) isGenericSpecialization() bool {
-	// Salva estado
-	savedCur := p.cur
-	savedNxt := p.nxt
-
-	defer func() {
-		p.cur = savedCur
-		p.nxt = savedNxt
-	}()
-
-	// Verifica padrão: IDENT "<" TYPE ("," TYPE)* ">" "("
-	if p.cur.Type != lexer.IDENT {
-		return false
-	}
-	p.advanceToken() // consume IDENT
-
-	if p.cur.Lexeme != "<" {
-		return false
-	}
-	p.advanceToken() // consume '<'
-
-	// Parse tipo
-	if !isTypeKeyword(p.cur.Lexeme) && p.cur.Type != lexer.IDENT {
-		return false
-	}
-	p.advanceToken() // consume type
-
-	// Possíveis mais tipos separados por vírgula
-	for p.cur.Lexeme == "," {
-		p.advanceToken() // consume ','
-		if !isTypeKeyword(p.cur.Lexeme) && p.cur.Type != lexer.IDENT {
-			return false
-		}
-		p.advanceToken() // consume type
-	}
-
-	if p.cur.Lexeme != ">" {
-		return false
-	}
-	p.advanceToken() // consume '>'
-
-	return p.cur.Lexeme == "("
-}
-
-func (p *Parser) parseGenericSpecialization(left Expr) Expr {
-	// left é o nome da função (ex: identity)
-	// token atual é '<'
-	p.advanceToken() // consume '<'
-
-	typeArgs := p.parseTypeArguments()
-	if typeArgs == nil {
-		return nil
-	}
-
-	if !p.expectAndConsume(">") {
-		return nil
-	}
-
-	// Depois de <T>, deve ter '(' para a chamada de função
-	if p.cur.Lexeme != "(" {
-		p.errorf("expected '(' after generic specialization")
-		return nil
-	}
-
-	// Parse a chamada de função normal
-	call := p.parseCall(left)
-	if call == nil {
-		return nil
-	}
-
-	return &GenericSpecialization{
-		Callee:   left,
-		TypeArgs: typeArgs,
-	}
 }

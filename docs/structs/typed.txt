@@ -12,11 +12,11 @@ Message message = {
     sender: "Samuel",
 }
 
-<T> struct Car {
+generic<T> struct Car {
     T motor
     int year
 }
-Car car = <string> {
+Car car = generic<string> {
     motor: "654MT4",
     year: 2001,
 }

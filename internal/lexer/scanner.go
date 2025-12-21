@@ -1,61 +1,57 @@
 package lexer
 
-// Scanner simples e performático usando []byte
+// Scanner []byte
 type Scanner struct {
 	src           []byte
-	n             int       // length of src
 	index         int       // próximo byte a ler
 	start         int       // início do token corrente
 	line          int       // linha atual (1-based)
 	col           int       // coluna atual (1-based)
-	tokenLine     int       // linha onde token corrente começou (mantido para emitir)
+	tokenLine     int       // linha onde token corrente começou
 	tokenCol      int       // coluna onde token corrente começou
-	lastTokenType TokenType // NOVO: Rastreia último token emitido
+	lastTokenType TokenType // último token emitido
 }
 
 func NewScanner(src string) *Scanner {
 	b := []byte(src)
 	return &Scanner{
-		src:           b,
-		n:             len(b),
-		index:         0,
-		start:         0,
-		line:          1,
-		col:           1,
-		lastTokenType: EOF, // Inicializa com EOF
+		src:   b,
+		index: 0,
+		line:  1,
+		col:   1,
 	}
 }
 
-func (s *Scanner) isEOF() bool { return s.index >= s.n }
+func (s *Scanner) isEOF() bool { return s.index >= len(s.src) }
 
 func (s *Scanner) peek(off int) byte {
 	i := s.index + off
-	if i >= s.n || i < 0 {
-		return 0
+	if i >= 0 && i < len(s.src) {
+		return s.src[i]
 	}
-	return s.src[i]
+	return 0
 }
 
-func (s *Scanner) advance() byte {
+func (s *Scanner) advance() {
 	if s.isEOF() {
-		return 0
+		return
 	}
+
 	ch := s.src[s.index]
 	s.index++
 
-	// CORREÇÃO: Tratamento mais robusto de quebras de linha
-	if ch == '\n' {
+	switch ch {
+	case '\n':
 		s.line++
 		s.col = 1
-	} else if ch == '\r' {
+	case '\r':
 		// Tratar \r\n como uma única quebra de linha
-		if !s.isEOF() && s.src[s.index] == '\n' {
+		if s.index < len(s.src) && s.src[s.index] == '\n' {
 			s.index++
 		}
 		s.line++
 		s.col = 1
-	} else {
+	default:
 		s.col++
 	}
-	return ch
 }

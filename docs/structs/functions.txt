@@ -13,11 +13,11 @@ string, error function isOldEnough(int age) {
     return "Ok, welcome", null
 }
 
-<T> string function hello(T msg) {
+generic<T> string function hello(T msg) {
     return "Hello " + msg
 }
-var message = <int> hello(30)
+var message = generic<int> hello(30)
 
-<A, B> string function hello(A a, B b) {
+generic<A, B> string function hello(A a, B b) {
     return string(a + b)
 }

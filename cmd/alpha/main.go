@@ -137,53 +137,6 @@ func main() {
 			}
 		`)
 
-	case "functions":
-		testCase("Função simples", `
-			int function sum(int a, int b) {
-				return a + b
-			}
-			
-			int result = sum(5, 10)
-		`)
-
-		testCase("Função sem retorno", `
-			void function printMessage(string msg) {
-				// imprime mensagem
-			}
-			
-			printMessage("Hello")
-		`)
-
-		testCase("Função com tipo genérico", `
-			<T> T function identity(T value) {
-				return value
-			}
-			
-			int num = <int> identity(5)
-			string text = <string> identity("test")
-		`)
-
-		testCase("Função com múltiplos parâmetros genéricos", `
-			<T, U> T function first(T a, U b) {
-				return a
-			}
-			
-			int result = <int, string> first(10, "hello")
-		`)
-
-		testCase("Função com array como parâmetro", `
-			int function sumArray(int[] numbers) {
-				int total = 0
-				for(n in numbers) {
-					total += n
-				}
-				return total
-			}
-			
-			int[] nums = [1, 2, 3, 4, 5]
-			int total = sumArray(nums)
-		`)
-
 	case "conditions":
 		testCase("If-else simples", `
 			int x = 10
@@ -251,6 +204,59 @@ func main() {
 			int max = a > b ? a : b
 			int min = a < b ? a : b
 			string result = a == b ? "equal" : "different"
+		`)
+
+	case "functions":
+		testCase("Função simples", `
+			int function sum(int a, int b) {
+				return a + b
+			}
+			
+			int result = sum(5, 10)
+		`)
+
+		testCase("Função sem retorno", `
+			void function printMessage(string msg) {
+				// imprime mensagem
+			}
+			
+			printMessage("Hello")
+		`)
+
+		testCase("Função com tipo genérico sem chamada", `
+			generic<T> T function identity(T value) {
+				return value
+			}
+		`)
+
+		testCase("Função com tipo genérico", `
+			generic<T> T function identity(T value) {
+				return value
+			}
+			
+			int num = generic<int> identity(5)
+			string text = generic<string> identity("test")
+		`)
+
+		testCase("Função com múltiplos parâmetros genéricos", `
+			generic<T, U> T function first(T a, U b) {
+				return a
+			}
+			
+			int result = generic<int, string> first(10, "hello")
+		`)
+
+		testCase("Função com array como parâmetro", `
+			int function sumArray(int[] numbers) {
+				int total = 0
+				for(n in numbers) {
+					total += n
+				}
+				return total
+			}
+			
+			int[] nums = [1, 2, 3, 4, 5]
+			int total = sumArray(nums)
 		`)
 
 	case "types":

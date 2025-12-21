@@ -1,7 +1,9 @@
 package lexer
 
+import "bytes"
+
 func isLetter(ch byte) bool {
-	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
+	return ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z'
 }
 
 func isDigit(ch byte) bool {
@@ -9,32 +11,28 @@ func isDigit(ch byte) bool {
 }
 
 func unescapeStringBytes(b []byte) string {
-	var result []byte
-	escaped := false
+	// Verifica se não há escapes para retornar rápido
+	if bytes.IndexByte(b, '\\') == -1 {
+		return string(b)
+	}
 
+	result := make([]byte, 0, len(b))
 	for i := 0; i < len(b); i++ {
-		if escaped {
-			switch b[i] {
-			case 'n':
-				result = append(result, '\n')
-			case 't':
-				result = append(result, '\t')
-			case 'r':
-				result = append(result, '\r')
-			case '"':
-				result = append(result, '"')
-			case '\\':
-				result = append(result, '\\')
-			default:
-				result = append(result, b[i])
-			}
-			escaped = false
-		} else if b[i] == '\\' {
-			escaped = true
+		if b[i] == '\\' && i+1 < len(b) {
+			i++
+			result = append(result, escapeMap[b[i]])
 		} else {
 			result = append(result, b[i])
 		}
 	}
 
 	return string(result)
+}
+
+var escapeMap = [256]byte{
+	'n':  '\n',
+	't':  '\t',
+	'r':  '\r',
+	'"':  '"',
+	'\\': '\\',
 }
