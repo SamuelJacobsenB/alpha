@@ -88,6 +88,8 @@ func main() {
 			int* num1 = &num
 		`)
 
+	case "conditions":
+
 	case "loops":
 		testCase("For loop tradicional", `
 			for(int i = 0; i < 10; i++) {
@@ -137,7 +139,6 @@ func main() {
 			}
 		`)
 
-	case "conditions":
 		testCase("If-else simples", `
 			int x = 10
 			if(x > 5) {
@@ -272,8 +273,8 @@ func main() {
 		`)
 
 		testCase("Type alias com genéricos", `
-			<T> type Pair [T, T]
-			Pair<int> coordinates = [10, 20]
+			generic<T> type Pair [T, T]
+			Pair coordinates = generic<int> [10, 20]
 		`)
 
 		testCase("Nullable types", `

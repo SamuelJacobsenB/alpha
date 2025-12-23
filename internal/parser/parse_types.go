@@ -4,20 +4,36 @@ import (
 	"github.com/alpha/internal/lexer"
 )
 
+// ============================
+// Constantes e Configurações
+// ============================
+
 var (
 	typeKeywords = map[string]bool{
-		"int": true, "string": true, "float": true, "bool": true,
-		"void": true, "byte": true, "char": true, "error": true,
-		"set": true, "map": true,
-		// Aceita letras maiúsculas como tipos genéricos
+		"int":    true,
+		"string": true,
+		"float":  true,
+		"bool":   true,
+		"void":   true,
+		"byte":   true,
+		"char":   true,
+		"error":  true,
+		"set":    true,
+		"map":    true,
+		// Letras maiúsculas são aceitas como tipos genéricos
 	}
 )
 
+// isTypeKeyword verifica se uma string é uma palavra-chave de tipo
 func isTypeKeyword(lex string) bool {
-	// Aceita keywords de tipo e letras maiúsculas únicas (tipos genéricos)
 	return typeKeywords[lex] || (len(lex) == 1 && lex[0] >= 'A' && lex[0] <= 'Z')
 }
 
+// ============================
+// Parsing de Tipos (Função Principal)
+// ============================
+
+// parseType analisa um tipo, incluindo tipos union (T1 | T2 | T3)
 func (p *Parser) parseType() Type {
 	left := p.parseSingleType()
 	if left == nil {
@@ -31,6 +47,11 @@ func (p *Parser) parseType() Type {
 	return p.parseUnionType(left)
 }
 
+// ============================
+// Tipos Union
+// ============================
+
+// parseUnionType analisa um tipo union (T1 | T2 | T3)
 func (p *Parser) parseUnionType(firstType Type) Type {
 	types := []Type{firstType}
 
@@ -47,6 +68,11 @@ func (p *Parser) parseUnionType(firstType Type) Type {
 	return &UnionType{Types: types}
 }
 
+// ============================
+// Tipos Simples
+// ============================
+
+// parseSingleType analisa um tipo simples (sem união)
 func (p *Parser) parseSingleType() Type {
 	if !isTypeKeyword(p.cur.Lexeme) && p.cur.Type != lexer.IDENT && p.cur.Type != lexer.GENERIC {
 		return nil
@@ -55,8 +81,10 @@ func (p *Parser) parseSingleType() Type {
 	var typ Type
 	switch p.cur.Lexeme {
 	case "set":
+		p.advanceToken() // consume 'set'
 		typ = p.parseGenericType("set")
 	case "map":
+		p.advanceToken() // consume 'map'
 		typ = p.parseGenericType("map")
 	default:
 		typ = p.parseBaseType()
@@ -65,6 +93,7 @@ func (p *Parser) parseSingleType() Type {
 	return p.parseTypeModifiers(typ)
 }
 
+// parseBaseType analisa um tipo base (primitivo ou identificador)
 func (p *Parser) parseBaseType() Type {
 	name := p.cur.Lexeme
 	p.advanceToken()
@@ -83,9 +112,14 @@ func (p *Parser) parseBaseType() Type {
 	return &IdentifierType{Name: name}
 }
 
-// ... resto do código permanece igual
+// ============================
+// Tipos Genéricos
+// ============================
 
+// parseGenericType analisa um tipo genérico (List<T>, Set<T>, Map<K,V>)
+// IMPORTANTE: Esta função espera que o nome do tipo já tenha sido consumido.
 func (p *Parser) parseGenericType(name string) Type {
+	// O token atual deve ser '<' (o nome já foi consumido)
 	if p.cur.Lexeme != "<" {
 		return nil
 	}
@@ -114,22 +148,38 @@ func (p *Parser) parseGenericType(name string) Type {
 
 	default:
 		// Para tipos genéricos definidos pelo usuário (como List<T>)
-		// Atualmente não armazenamos os parâmetros genéricos
-		// TODO: Implementar GenericType struct
-		_ = p.parseType()
+		firstTypeArg := p.parseType()
+		if firstTypeArg == nil {
+			return nil
+		}
 
+		// Coletar todos os argumentos de tipo
+		typeArgs := []Type{firstTypeArg}
 		for p.cur.Lexeme == "," {
 			p.advanceToken()
-			_ = p.parseType()
+			nextTypeArg := p.parseType()
+			if nextTypeArg == nil {
+				return nil
+			}
+			typeArgs = append(typeArgs, nextTypeArg)
 		}
 
 		if !p.expectAndConsume(">") {
 			return nil
 		}
-		return &IdentifierType{Name: name}
+
+		return &GenericType{
+			Name:     name,
+			TypeArgs: typeArgs,
+		}
 	}
 }
 
+// ============================
+// Modificadores de Tipo
+// ============================
+
+// parseTypeModifiers aplica modificadores a um tipo (? nullable, * pointer, [] array)
 func (p *Parser) parseTypeModifiers(base Type) Type {
 	current := base
 
@@ -149,8 +199,9 @@ func (p *Parser) parseTypeModifiers(base Type) Type {
 	}
 }
 
+// parseArrayType analisa um tipo de array (elementType[])
 func (p *Parser) parseArrayType(elementType Type) Type {
-	p.advanceToken()
+	p.advanceToken() // consume '['
 
 	var size Expr
 	if p.cur.Lexeme != "]" {

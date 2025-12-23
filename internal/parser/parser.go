@@ -8,6 +8,11 @@ import (
 	"github.com/alpha/internal/lexer"
 )
 
+// ============================
+// Estrutura do Parser
+// ============================
+
+// Parser representa o analisador sintático
 type Parser struct {
 	sc     *lexer.Scanner
 	cur    lexer.Token
@@ -15,6 +20,11 @@ type Parser struct {
 	Errors []string
 }
 
+// ============================
+// Inicialização e Configuração
+// ============================
+
+// New cria uma nova instância do parser
 func New(sc *lexer.Scanner) *Parser {
 	p := &Parser{sc: sc}
 	p.advanceToken() // Carrega primeiro token em cur
@@ -22,21 +32,21 @@ func New(sc *lexer.Scanner) *Parser {
 	return p
 }
 
+// ============================
+// Funções de Avanço de Tokens
+// ============================
+
+// advanceToken avança para o próximo token
 func (p *Parser) advanceToken() {
 	p.cur = p.nxt
 	p.nxt = p.sc.NextToken()
 }
 
-func (p *Parser) errorf(format string, args ...interface{}) {
-	p.Errors = append(p.Errors, fmt.Sprintf(format, args...))
-}
+// ============================
+// Funções de Parsing Principal
+// ============================
 
-func (p *Parser) consumeOptionalSemicolon() {
-	if p.cur.Lexeme == ";" {
-		p.advanceToken()
-	}
-}
-
+// ParseProgram analisa um programa completo
 func (p *Parser) ParseProgram() *Program {
 	body := make([]Stmt, 0, 10)
 
@@ -57,6 +67,11 @@ func (p *Parser) ParseProgram() *Program {
 	return &Program{Body: body}
 }
 
+// ============================
+// Funções de Parsing de Literais
+// ============================
+
+// parseNumberToken analisa um token numérico (inteiro ou float)
 func (p *Parser) parseNumberToken(tok lexer.Token) Expr {
 	var expr Expr
 
@@ -72,6 +87,11 @@ func (p *Parser) parseNumberToken(tok lexer.Token) Expr {
 	return expr
 }
 
+// ============================
+// Funções de Verificação e Validação
+// ============================
+
+// expectAndConsume verifica se o token atual é o esperado e consome
 func (p *Parser) expectAndConsume(expected string) bool {
 	if p.cur.Lexeme == expected {
 		p.advanceToken()
@@ -81,16 +101,12 @@ func (p *Parser) expectAndConsume(expected string) bool {
 	return false
 }
 
+// isAtEndOfStatement verifica se estamos no fim de um statement
 func (p *Parser) isAtEndOfStatement() bool {
 	return p.cur.Lexeme == ";" || p.cur.Lexeme == "}" || p.cur.Type == lexer.EOF
 }
 
-func (p *Parser) syncToNextStmt() {
-	for !p.isAtStmtStart() && p.cur.Type != lexer.EOF {
-		p.advanceToken()
-	}
-}
-
+// isAtStmtStart verifica se estamos no início de um statement
 func (p *Parser) isAtStmtStart() bool {
 	return p.cur.Lexeme == ";" ||
 		p.cur.Lexeme == "}" ||
@@ -99,19 +115,53 @@ func (p *Parser) isAtStmtStart() bool {
 		isTypeKeyword(p.cur.Lexeme)
 }
 
-func (p *Parser) HasErrors() bool {
-	return len(p.Errors) > 0
+// ============================
+// Funções de Sincronização
+// ============================
+
+// syncToNextStmt sincroniza para o próximo statement após um erro
+func (p *Parser) syncToNextStmt() {
+	for !p.isAtStmtStart() && p.cur.Type != lexer.EOF {
+		p.advanceToken()
+	}
 }
 
-func (p *Parser) ErrorsText() string {
-	return strings.Join(p.Errors, "\n")
-}
-
+// syncTo sincroniza até encontrar um token específico
 func (p *Parser) syncTo(token string) {
 	for p.cur.Lexeme != token && p.cur.Type != lexer.EOF {
 		p.advanceToken()
 	}
 	if p.cur.Lexeme == token {
+		p.advanceToken()
+	}
+}
+
+// ============================
+// Funções de Controle de Erros
+// ============================
+
+// errorf adiciona um erro à lista de erros
+func (p *Parser) errorf(format string, args ...interface{}) {
+	p.Errors = append(p.Errors, fmt.Sprintf(format, args...))
+}
+
+// HasErrors verifica se há erros no parser
+func (p *Parser) HasErrors() bool {
+	return len(p.Errors) > 0
+}
+
+// ErrorsText retorna todos os erros como uma única string
+func (p *Parser) ErrorsText() string {
+	return strings.Join(p.Errors, "\n")
+}
+
+// ============================
+// Funções Auxiliares
+// ============================
+
+// consumeOptionalSemicolon consome ponto-e-vírgula opcional
+func (p *Parser) consumeOptionalSemicolon() {
+	if p.cur.Lexeme == ";" {
 		p.advanceToken()
 	}
 }

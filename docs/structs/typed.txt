@@ -3,6 +3,9 @@ package example
 type Number int | float
 Number num = 5.5
 
+generic<T> Hello [T, T]
+generic<int> Hello hello = [10, 20]
+
 struct Message {
     string text
     string sender

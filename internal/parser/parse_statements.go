@@ -2,8 +2,13 @@ package parser
 
 import "github.com/alpha/internal/lexer"
 
+// ============================
+// Parsing de Nível Superior
+// ============================
+
+// parseTopLevel analisa declarações e statements de nível superior
 func (p *Parser) parseTopLevel() Stmt {
-	// Ignorar semicolons soltos
+	// Ignorar pontos-e-vírgulas soltos
 	for p.cur.Lexeme == ";" {
 		p.advanceToken()
 	}
@@ -21,17 +26,16 @@ func (p *Parser) parseTopLevel() Stmt {
 		return p.parseClass()
 	case "type":
 		return p.parseTypeDecl()
+	case "generic":
+		return p.parseGenericFunctionDecl()
 	case "if", "while", "do", "for", "switch", "return", "break", "continue":
 		return p.parseControlStmt()
-	case "generic":
-		return p.parseGenericFunctionDecl() // NOVO CASO
 	default:
 		return p.parseDefaultStmt()
 	}
 }
 
-// ... resto do código permanece igual
-
+// parseAndConsume executa uma função de parsing e consome ponto-e-vírgula opcional
 func (p *Parser) parseAndConsume(fn func() Stmt) Stmt {
 	stmt := fn()
 	if stmt != nil && p.cur.Lexeme == ";" {
@@ -40,6 +44,7 @@ func (p *Parser) parseAndConsume(fn func() Stmt) Stmt {
 	return stmt
 }
 
+// parseDefaultStmt lida com declarações de função e statements de expressão
 func (p *Parser) parseDefaultStmt() Stmt {
 	if isTypeKeyword(p.cur.Lexeme) {
 		if p.nxt.Lexeme == "function" {
@@ -50,6 +55,11 @@ func (p *Parser) parseDefaultStmt() Stmt {
 	return p.parseAndConsume(p.parseExprStmt)
 }
 
+// ============================
+// Statements de Expressão
+// ============================
+
+// parseExprStmt analisa um statement de expressão
 func (p *Parser) parseExprStmt() Stmt {
 	expr := p.parseExpression(LOWEST)
 	if expr == nil {
@@ -58,6 +68,11 @@ func (p *Parser) parseExprStmt() Stmt {
 	return &ExprStmt{Expr: expr}
 }
 
+// ============================
+// Statements de Controle
+// ============================
+
+// parseControlStmt roteia para o parser específico de controle
 func (p *Parser) parseControlStmt() Stmt {
 	switch p.cur.Lexeme {
 	case "if":
@@ -80,8 +95,13 @@ func (p *Parser) parseControlStmt() Stmt {
 	return nil
 }
 
+// ============================
+// Condicionais (if/switch)
+// ============================
+
+// parseIf analisa uma declaração if-else
 func (p *Parser) parseIf() Stmt {
-	p.advanceToken()
+	p.advanceToken() // consume 'if'
 
 	cond := p.parseCondition()
 	if cond == nil {
@@ -94,8 +114,103 @@ func (p *Parser) parseIf() Stmt {
 	return &IfStmt{Cond: cond, Then: thenBlock, Else: elseBlock}
 }
 
-func (p *Parser) parseWhile() Stmt {
+// parseOptionalElse analisa um bloco else opcional
+func (p *Parser) parseOptionalElse() []Stmt {
+	if p.cur.Lexeme != "else" {
+		return nil
+	}
+
 	p.advanceToken()
+	return p.parseBlockLike()
+}
+
+// parseSwitch analisa uma declaração switch
+func (p *Parser) parseSwitch() Stmt {
+	p.advanceToken() // consume 'switch'
+
+	cond := p.parseCondition()
+	if cond == nil {
+		return nil
+	}
+
+	if !p.expectAndConsume("{") {
+		p.errorf("expected '{' after switch condition")
+		return nil
+	}
+
+	cases := p.parseSwitchCases()
+	if cases == nil || !p.expectAndConsume("}") {
+		return nil
+	}
+
+	return &SwitchStmt{Expr: cond, Cases: cases}
+}
+
+// parseSwitchCases analisa todos os casos de um switch
+func (p *Parser) parseSwitchCases() []*CaseClause {
+	cases := make([]*CaseClause, 0, 3)
+
+	for !p.isAtSwitchEnd() {
+		clause := p.parseCaseClause()
+		if clause != nil {
+			cases = append(cases, clause)
+		}
+	}
+
+	return cases
+}
+
+// parseCaseClause analisa um único caso ou default
+func (p *Parser) parseCaseClause() *CaseClause {
+	var value Expr
+
+	switch p.cur.Lexeme {
+	case "case":
+		p.advanceToken()
+		value = p.parseExpression(LOWEST)
+		if value == nil {
+			p.errorf("expected expression after 'case'")
+			return nil
+		}
+	case "default":
+		p.advanceToken()
+		value = nil
+	default:
+		p.errorf("expected 'case' or 'default', got '%s'", p.cur.Lexeme)
+		return nil
+	}
+
+	if !p.expectAndConsume(":") {
+		return nil
+	}
+
+	return &CaseClause{
+		Value: value,
+		Body:  p.parseCaseBody(),
+	}
+}
+
+// parseCaseBody analisa o corpo de um caso
+func (p *Parser) parseCaseBody() []Stmt {
+	body := make([]Stmt, 0, 3)
+
+	for !p.isAtCaseEnd() {
+		stmt := p.parseTopLevel()
+		if stmt != nil {
+			body = append(body, stmt)
+		}
+	}
+
+	return body
+}
+
+// ============================
+// Loops (for/while/do-while)
+// ============================
+
+// parseWhile analisa um loop while
+func (p *Parser) parseWhile() Stmt {
+	p.advanceToken() // consume 'while'
 
 	cond := p.parseCondition()
 	if cond == nil {
@@ -105,11 +220,17 @@ func (p *Parser) parseWhile() Stmt {
 	return &WhileStmt{Cond: cond, Body: p.parseBlockLike()}
 }
 
+// parseDoWhile analisa um loop do-while
 func (p *Parser) parseDoWhile() Stmt {
-	p.advanceToken()
+	p.advanceToken() // consume 'do'
 
 	body := p.parseBlockLike()
-	if body == nil || !p.expectAndConsume("while") {
+	if body == nil {
+		p.errorf("expected block after 'do'")
+		return nil
+	}
+
+	if !p.expectAndConsume("while") {
 		p.errorf("expected 'while' after do block")
 		return nil
 	}
@@ -122,8 +243,9 @@ func (p *Parser) parseDoWhile() Stmt {
 	return &DoWhileStmt{Body: body, Cond: cond}
 }
 
+// parseFor decide entre for tradicional e for-in
 func (p *Parser) parseFor() Stmt {
-	p.advanceToken()
+	p.advanceToken() // consume 'for'
 
 	if p.isForInLoop() {
 		return p.parseForIn()
@@ -131,6 +253,7 @@ func (p *Parser) parseFor() Stmt {
 	return p.parseForTraditional()
 }
 
+// parseForTraditional analisa um for loop tradicional
 func (p *Parser) parseForTraditional() Stmt {
 	if !p.expectAndConsume("(") {
 		return nil
@@ -141,8 +264,9 @@ func (p *Parser) parseForTraditional() Stmt {
 		init = p.parseForLoopInitializer()
 	}
 
-	if !p.expectAndConsume(";") && p.cur.Lexeme != ";" {
+	if !p.expectAndConsume(";") {
 		p.syncTo(";")
+		return nil
 	}
 
 	var cond Expr
@@ -150,26 +274,33 @@ func (p *Parser) parseForTraditional() Stmt {
 		cond = p.parseExpression(LOWEST)
 	}
 
-	if !p.expectAndConsume(";") && p.cur.Lexeme != ";" {
+	if !p.expectAndConsume(";") {
 		p.syncTo(";")
+		return nil
 	}
 
 	var post Stmt
 	if p.cur.Lexeme != ")" {
-		postExpr := p.parseExpression(LOWEST)
-		if postExpr != nil {
-			post = &ExprStmt{Expr: postExpr}
+		expr := p.parseExpression(LOWEST)
+		if expr != nil {
+			post = &ExprStmt{Expr: expr}
 		}
 	}
 
 	if !p.expectAndConsume(")") {
 		p.syncTo(")")
+		return nil
 	}
 
-	body := p.parseBlockLike()
-	return &ForStmt{Init: init, Cond: cond, Post: post, Body: body}
+	return &ForStmt{
+		Init: init,
+		Cond: cond,
+		Post: post,
+		Body: p.parseBlockLike(),
+	}
 }
 
+// parseForIn analisa um for-in loop
 func (p *Parser) parseForIn() Stmt {
 	if !p.expectAndConsume("(") {
 		return nil
@@ -209,10 +340,15 @@ func (p *Parser) parseForIn() Stmt {
 		return nil
 	}
 
-	body := p.parseBlockLike()
-	return &ForInStmt{Index: index, Item: item, Iterable: iterable, Body: body}
+	return &ForInStmt{
+		Index:    index,
+		Item:     item,
+		Iterable: iterable,
+		Body:     p.parseBlockLike(),
+	}
 }
 
+// parseForLoopInitializer analisa o inicializador de um for loop
 func (p *Parser) parseForLoopInitializer() Stmt {
 	if p.cur.Lexeme == ";" {
 		return nil
@@ -234,6 +370,7 @@ func (p *Parser) parseForLoopInitializer() Stmt {
 	return p.parseExprStmt()
 }
 
+// isForInLoop verifica se o próximo token indica um for-in loop
 func (p *Parser) isForInLoop() bool {
 	return p.cur.Lexeme == "(" &&
 		p.nxt.Type == lexer.IDENT &&
@@ -241,84 +378,44 @@ func (p *Parser) isForInLoop() bool {
 		p.nxt.Lexeme != "var"
 }
 
-func (p *Parser) parseSwitch() Stmt {
-	p.advanceToken()
+// ============================
+// Statements de Fluxo
+// ============================
 
-	cond := p.parseCondition()
-	if cond == nil || !p.expectAndConsume("{") {
-		p.errorf("expected '{' after switch condition")
-		return nil
-	}
-
-	cases := make([]*CaseClause, 0, 3)
-	for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
-		caseClause := p.parseCaseClause()
-		if caseClause != nil {
-			cases = append(cases, caseClause)
-		}
-	}
-
-	if !p.expectAndConsume("}") {
-		return nil
-	}
-
-	return &SwitchStmt{Expr: cond, Cases: cases}
-}
-
-func (p *Parser) parseCaseClause() *CaseClause {
-	var value Expr
-
-	switch p.cur.Lexeme {
-	case "case":
-		p.advanceToken()
-		value = p.parseExpression(LOWEST)
-		if value == nil {
-			p.errorf("expected expression after 'case'")
-			return nil
-		}
-	case "default":
-		p.advanceToken()
-		value = nil
-	default:
-		p.errorf("expected 'case' or 'default', got '%s'", p.cur.Lexeme)
-		return nil
-	}
-
-	if !p.expectAndConsume(":") {
-		return nil
-	}
-
-	body := make([]Stmt, 0, 3)
-	for !p.isCaseOrBlockEnd() {
-		stmt := p.parseTopLevel()
-		if stmt != nil {
-			body = append(body, stmt)
-		}
-	}
-
-	return &CaseClause{Value: value, Body: body}
-}
-
-func (p *Parser) isCaseOrBlockEnd() bool {
-	return p.cur.Lexeme == "case" ||
-		p.cur.Lexeme == "default" ||
-		p.cur.Lexeme == "}" ||
-		p.cur.Type == lexer.EOF
-}
-
+// parseReturn analisa um statement de retorno
 func (p *Parser) parseReturn() Stmt {
-	p.advanceToken()
+	p.advanceToken() // consume 'return'
 
 	if p.isAtEndOfStatement() {
 		p.consumeOptionalSemicolon()
 		return &ReturnStmt{Value: nil}
 	}
 
-	stmt := &ReturnStmt{Value: p.parseExpression(LOWEST)}
+	value := p.parseExpression(LOWEST)
 	p.consumeOptionalSemicolon()
-	return stmt
+
+	return &ReturnStmt{Value: value}
 }
 
+// parseBreak analisa um statement break
+func (p *Parser) parseBreak() Stmt {
+	p.advanceToken()
+	p.consumeOptionalSemicolon()
+	return &BreakStmt{}
+}
+
+// parseContinue analisa um statement continue
+func (p *Parser) parseContinue() Stmt {
+	p.advanceToken()
+	p.consumeOptionalSemicolon()
+	return &ContinueStmt{}
+}
+
+// ============================
+// Funções Auxiliares
+// ============================
+
+// parseCondition analisa uma condição entre parênteses
 func (p *Parser) parseCondition() Expr {
 	if !p.expectAndConsume("(") {
 		p.errorf("expected '(' after %s", p.cur.Lexeme)
@@ -340,26 +437,7 @@ func (p *Parser) parseCondition() Expr {
 	return cond
 }
 
-func (p *Parser) parseOptionalElse() []Stmt {
-	if p.cur.Lexeme == "else" {
-		p.advanceToken()
-		return p.parseBlockLike()
-	}
-	return nil
-}
-
-func (p *Parser) parseBreak() Stmt {
-	p.advanceToken()
-	p.consumeOptionalSemicolon()
-	return &BreakStmt{}
-}
-
-func (p *Parser) parseContinue() Stmt {
-	p.advanceToken()
-	p.consumeOptionalSemicolon()
-	return &ContinueStmt{}
-}
-
+// parseBlockLike analisa um bloco ou statement único
 func (p *Parser) parseBlockLike() []Stmt {
 	if p.cur.Lexeme == "{" {
 		return p.parseBlock()
@@ -372,6 +450,7 @@ func (p *Parser) parseBlockLike() []Stmt {
 	return nil
 }
 
+// parseBlock analisa um bloco de statements
 func (p *Parser) parseBlock() []Stmt {
 	if !p.expectAndConsume("{") {
 		return nil
@@ -389,4 +468,21 @@ func (p *Parser) parseBlock() []Stmt {
 		return nil
 	}
 	return stmts
+}
+
+// ============================
+// Funções de Verificação
+// ============================
+
+// isAtSwitchEnd verifica se chegou ao fim do switch
+func (p *Parser) isAtSwitchEnd() bool {
+	return p.cur.Lexeme == "}" || p.cur.Type == lexer.EOF
+}
+
+// isAtCaseEnd verifica se chegou ao fim de um caso
+func (p *Parser) isAtCaseEnd() bool {
+	return p.cur.Lexeme == "case" ||
+		p.cur.Lexeme == "default" ||
+		p.cur.Lexeme == "}" ||
+		p.cur.Type == lexer.EOF
 }

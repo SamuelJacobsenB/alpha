@@ -18,7 +18,7 @@ bool ifLogged = true
 int hello = 30
 int* helloPointer = &hello
 
-set<int> nums = [1, 2, 4]
+set<int> nums = {1, 2, 4}
 map<int, string> mapTest = {
     1: "Hello",
     2: "Bye",
