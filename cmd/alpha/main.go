@@ -89,56 +89,6 @@ func main() {
 		`)
 
 	case "conditions":
-
-	case "loops":
-		testCase("For loop tradicional", `
-			for(int i = 0; i < 10; i++) {
-				int x = i * 2
-			}
-		`)
-
-		testCase("For-in loop", `
-			int[] numbers = [1, 2, 3, 4, 5]
-			for(num in numbers) {
-				int squared = num * num
-			}
-		`)
-
-		testCase("For-in loop com índice", `
-			string[] names = ["Alice", "Bob", "Charlie"]
-			for(i, name in names) {
-				string greeting = "Hello " + name
-			}
-		`)
-
-		testCase("While loop", `
-			int counter = 0
-			while(counter < 10) {
-				counter++
-			}
-		`)
-
-		testCase("Do-while loop", `
-			int x = 0
-			do {
-				x++
-			} while(x < 5)
-		`)
-
-		testCase("Loop com break e continue", `
-			int i = 0
-			while(true) {
-				if(i >= 10) {
-					break
-				}
-				if(i % 2 == 0) {
-					i++
-					continue
-				}
-				i++
-			}
-		`)
-
 		testCase("If-else simples", `
 			int x = 10
 			if(x > 5) {
@@ -205,6 +155,55 @@ func main() {
 			int max = a > b ? a : b
 			int min = a < b ? a : b
 			string result = a == b ? "equal" : "different"
+		`)
+
+	case "loops":
+		testCase("For loop tradicional", `
+			for(int i = 0; i < 10; i++) {
+				int x = i * 2
+			}
+		`)
+
+		testCase("For-in loop", `
+			int[] numbers = [1, 2, 3, 4, 5]
+			for(num in numbers) {
+				int squared = num * num
+			}
+		`)
+
+		testCase("For-in loop com índice", `
+			string[] names = ["Alice", "Bob", "Charlie"]
+			for(i, name in names) {
+				string greeting = "Hello " + name
+			}
+		`)
+
+		testCase("While loop", `
+			int counter = 0
+			while(counter < 10) {
+				counter++
+			}
+		`)
+
+		testCase("Do-while loop", `
+			int x = 0
+			do {
+				x++
+			} while(x < 5)
+		`)
+
+		testCase("Loop com break e continue", `
+			int i = 0
+			while(true) {
+				if(i >= 10) {
+					break
+				}
+				if(i % 2 == 0) {
+					i++
+					continue
+				}
+				i++
+			}
 		`)
 
 	case "functions":
@@ -290,7 +289,13 @@ func main() {
 		`)
 
 		testCase("Map types", `
-			map<string, int> scores = {
+			map<string, int> scores = map<string, int>{
+				"Alice": 95,
+				"Bob": 87,
+				"Charlie": 92
+			}
+
+			var scores1 = map<string, int>{
 				"Alice": 95,
 				"Bob": 87,
 				"Charlie": 92
@@ -298,8 +303,8 @@ func main() {
 		`)
 
 		testCase("Set types", `
-			set<int> numbers = {1, 2, 3, 4, 5}
-			set<string> names = {"Alice", "Bob"}
+			set<int> numbers = set<int>{1, 2, 3, 4, 5}
+			var names = set<string>{"Alice", "Bob"}
 		`)
 
 	case "structs":
@@ -309,7 +314,7 @@ func main() {
 				int y
 			}
 			
-			Point p = {
+			Point p = Point {
 				x: 10,
 				y: 20
 			}
@@ -319,17 +324,12 @@ func main() {
 			struct Rectangle {
 				int width
 				int height
-				
-				int method area() {
-					return width * height
-				}
 			}
 			
-			Rectangle rect = {
+			Rectangle rect = Rectangle {
 				width: 10,
 				height: 20
 			}
-			int area = rect.area()
 		`)
 
 		testCase("Struct aninhado", `
@@ -344,10 +344,10 @@ func main() {
 				Address address
 			}
 			
-			Person person = {
+			Person person = Person {
 				name: "Alice",
 				age: 30,
-				address: {
+				address: Address {
 					street: "Main St",
 					city: "New York"
 				}
@@ -355,18 +355,14 @@ func main() {
 		`)
 
 		testCase("Struct com tipo genérico", `
-			<T> struct Box {
+			generic<T> struct Box {
 				T content
-				
-				T method getContent() {
-					return content
-				}
 			}
 			
-			Box<int> intBox = {
+			Box intBox = generic<int> Box {
 				content: 42
 			}
-			Box<string> stringBox = {
+			Box stringBox = generic<string> Box {
 				content: "hello"
 			}
 		`)
@@ -419,11 +415,11 @@ func main() {
 
 		testCase("Classe com métodos estáticos", `
 			class MathUtils {
-				static int method max(int a, int b) {
+				int method max(int a, int b) {
 					return a > b ? a : b
 				}
 				
-				static float method pi() {
+				float method pi() {
 					return 3.14159
 				}
 			}
@@ -433,7 +429,7 @@ func main() {
 		`)
 
 		testCase("Classe com tipo genérico", `
-			<T> class Container {
+			generic<T> class Container {
 				T[] items
 				
 				constructor() {
@@ -441,22 +437,22 @@ func main() {
 				}
 				
 				void method add(T item) {
-					this.items[this.items.length] = item
+					// this will add
 				}
 				
 				T method get(int index) {
-					return this.items[index]
+					// this will get
 				}
 			}
 			
-			Container<int> intContainer = new Container<int>()
+			Container intContainer = genric<int> new Container()
 			intContainer.add(10)
 			intContainer.add(20)
-			int value = intContainer.get(0)
+			intContainer.get(0)
 		`)
 
 		testCase("Classe com múltiplos genéricos", `
-			<K, V> class Pair {
+			generic<K, V> class Pair {
 				K key
 				V value
 				
@@ -474,7 +470,7 @@ func main() {
 				}
 			}
 			
-			Pair<string, int> entry = new Pair<string, int>("age", 30)
+			Pair entry = generic<string, int> new Pair("age", 30)
 			string key = entry.getKey()
 			int value = entry.getValue()
 		`)

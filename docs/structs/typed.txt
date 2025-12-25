@@ -4,13 +4,13 @@ type Number int | float
 Number num = 5.5
 
 generic<T> Hello [T, T]
-generic<int> Hello hello = [10, 20]
+Hello hello = generic<int> [10, 20]
 
 struct Message {
     string text
     string sender
 }
-Message message = {
+Message message = Message {
     text: "This is a message",
     sender: "Samuel",
 }
@@ -19,7 +19,7 @@ generic<T> struct Car {
     T motor
     int year
 }
-Car car = generic<string> {
+Car car = generic<string> Car {
     motor: "654MT4",
     year: 2001,
 }

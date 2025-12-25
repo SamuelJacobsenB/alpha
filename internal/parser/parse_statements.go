@@ -8,7 +8,7 @@ import "github.com/alpha/internal/lexer"
 
 // parseTopLevel analisa declarações e statements de nível superior
 func (p *Parser) parseTopLevel() Stmt {
-	// Ignorar pontos-e-vírgulas soltos
+	// ... (Código de pular ;)
 	for p.cur.Lexeme == ";" {
 		p.advanceToken()
 	}
@@ -24,10 +24,14 @@ func (p *Parser) parseTopLevel() Stmt {
 		return p.parseAndConsume(p.parseConstDecl)
 	case "class":
 		return p.parseClass()
+	case "struct":
+		return p.parseStructDecl(nil)
 	case "type":
 		return p.parseTypeDecl()
 	case "generic":
-		return p.parseGenericFunctionDecl()
+		return p.parseGenericDeclaration()
+	case "<":
+		return p.parseGenericTopLevel()
 	case "if", "while", "do", "for", "switch", "return", "break", "continue":
 		return p.parseControlStmt()
 	default:
