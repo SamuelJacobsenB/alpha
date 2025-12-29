@@ -5,11 +5,12 @@ import (
 )
 
 // ============================
-// Declarações de Variáveis/Constantes
+// Declarações de Variáveis e Constantes
 // ============================
 
 func (p *Parser) parseTypedVarDecl() Stmt {
 	typ := p.parseType()
+	// Se parseType falhar ou não houver identificador a seguir, retorna nil imediatamente
 	if typ == nil || p.cur.Type != lexer.IDENT {
 		return nil
 	}
@@ -23,6 +24,7 @@ func (p *Parser) parseTypedVarDecl() Stmt {
 		init = p.parseExpression(LOWEST)
 		if init == nil {
 			p.errorf("expected expression after '='")
+			// Não sincronizamos aqui pois parseTypedVarDecl é geralmente especulativo
 			return nil
 		}
 	}
@@ -31,10 +33,11 @@ func (p *Parser) parseTypedVarDecl() Stmt {
 }
 
 func (p *Parser) parseVarDecl() Stmt {
-	p.advanceToken() // consume 'var'
+	p.advanceToken() // consome 'var'
 
 	if p.cur.Type != lexer.IDENT {
-		p.errorf("expected identifier after var at %d:%d", p.cur.Line, p.cur.Col)
+		p.errorf("expected identifier after 'var'")
+		p.syncTo(";")
 		return nil
 	}
 
@@ -46,18 +49,21 @@ func (p *Parser) parseVarDecl() Stmt {
 		p.advanceToken()
 		typ = p.parseType()
 		if typ == nil {
+			p.syncTo(";")
 			return nil
 		}
 	}
 
-	return &VarDecl{Name: name, Type: typ, Init: p.parseOptionalInitializer()}
+	init := p.parseOptionalInitializer()
+	return &VarDecl{Name: name, Type: typ, Init: init}
 }
 
 func (p *Parser) parseConstDecl() Stmt {
-	p.advanceToken() // consume 'const'
+	p.advanceToken() // consome 'const'
 
 	if p.cur.Type != lexer.IDENT {
-		p.errorf("expected identifier after const at %d:%d", p.cur.Line, p.cur.Col)
+		p.errorf("expected identifier after 'const'")
+		p.syncTo(";")
 		return nil
 	}
 
@@ -65,12 +71,18 @@ func (p *Parser) parseConstDecl() Stmt {
 	p.advanceToken()
 
 	if p.cur.Lexeme != "=" {
-		p.errorf("expected = in const declaration at %d:%d", p.cur.Line, p.cur.Col)
+		p.errorf("expected '=' in const declaration")
+		p.syncTo(";")
 		return nil
 	}
 
 	p.advanceToken()
 	init := p.parseExpression(LOWEST)
+	if init == nil {
+		p.errorf("expected expression for constant value")
+		p.syncTo(";")
+		return nil
+	}
 
 	return &ConstDecl{Name: name, Init: init}
 }
@@ -81,6 +93,7 @@ func (p *Parser) parseOptionalInitializer() Expr {
 	}
 	p.advanceToken()
 
+	// Otimização: verifica literais comuns antes de chamar parseExpression completo
 	switch p.cur.Lexeme {
 	case "{":
 		return p.parseCollectionLiteral()
@@ -104,7 +117,16 @@ func (p *Parser) parseFunctionDecl(generic bool) Stmt {
 	}
 
 	returnType := p.parseType()
-	if returnType == nil || !p.expectAndConsume("function") || p.cur.Type != lexer.IDENT {
+	if returnType == nil {
+		return nil
+	}
+
+	if !p.expectAndConsume("function") {
+		return nil
+	}
+
+	if p.cur.Type != lexer.IDENT {
+		p.errorf("expected function name")
 		return nil
 	}
 
@@ -123,85 +145,235 @@ func (p *Parser) parseFunctionDecl(generic bool) Stmt {
 	}
 }
 
-func (p *Parser) parseGenericDeclaration() Stmt {
-	generics := p.parseGenericParamsWithPrefix()
+// ============================
+// Structs (Dados)
+// ============================
+
+// parseStructDecl lida com 'struct Name { ... }' e 'generic<T> struct Name { ... }'
+func (p *Parser) parseStructDecl(generics []*GenericParam) Stmt {
+	// Se generics não foram passados, tenta ler o prefixo
 	if generics == nil {
+		generics = p.parseGenericParamsWithPrefix()
+	}
+
+	if !p.expectAndConsume("struct") {
 		return nil
 	}
 
-	// Verifica qual tipo de declaração segue os generics
-	switch p.cur.Lexeme {
-	case "struct":
-		return p.parseStructDecl(generics)
-	case "class":
-		// Lógica similar a parseClass, mas injetando os generics já parseados
-		p.advanceToken() // consume 'class'
-		if p.cur.Type != lexer.IDENT {
-			p.errorf("expected class name")
-			return nil
-		}
-		name := p.cur.Lexeme
-		p.advanceToken()
-		if !p.expectAndConsume("{") {
-			return nil
-		}
-		fields, constructor, methods := p.parseClassMembers()
-		if !p.expectAndConsume("}") {
-			return nil
-		}
-		return &ClassDecl{
-			Name:        name,
-			Generics:    generics,
-			Fields:      fields,
-			Constructor: constructor,
-			Methods:     methods,
-		}
-	default:
-		// Assume que é uma função: generic<T> Tipo function ...
-		returnType := p.parseType()
-		if returnType == nil || !p.expectAndConsume("function") || p.cur.Type != lexer.IDENT {
-			return nil
+	if p.cur.Type != lexer.IDENT {
+		p.errorf("expected struct name")
+		p.syncTo("}")
+		return nil
+	}
+
+	name := p.cur.Lexeme
+	p.advanceToken()
+
+	// Suporte para generics após o nome (sintaxe alternativa)
+	if generics == nil && p.cur.Lexeme == "<" {
+		generics = p.parseGenericParamsList()
+	}
+
+	if !p.expectAndConsume("{") {
+		return nil
+	}
+
+	fields := p.parseStructFields()
+
+	if !p.expectAndConsume("}") {
+		return nil
+	}
+
+	return &StructDecl{
+		Name:     name,
+		Generics: generics,
+		Fields:   fields,
+	}
+}
+
+func (p *Parser) parseStructFields() []*FieldDecl {
+	fields := make([]*FieldDecl, 0, 4)
+
+	for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
+		// Ignorar pontos e vírgulas soltos
+		if p.cur.Lexeme == ";" {
+			p.advanceToken()
+			continue
 		}
 
-		name := p.cur.Lexeme
+		isPrivate := false
+		if p.cur.Lexeme == "private" {
+			isPrivate = true
+			p.advanceToken()
+		}
+
+		// Parse o tipo do campo
+		typ := p.parseType()
+		if typ == nil {
+			if isPrivate {
+				p.errorf("expected type after 'private'")
+			} else {
+				p.errorf("expected field type in struct, got '%s'", p.cur.Lexeme)
+			}
+			p.syncStructField()
+			continue
+		}
+
+		// Parse o nome do campo
+		if p.cur.Type != lexer.IDENT {
+			p.errorf("expected field name after type, got '%s'", p.cur.Lexeme)
+			p.syncStructField()
+			continue
+		}
+
+		fieldName := p.cur.Lexeme
+		p.advanceToken()
+
+		// Consumir ponto e vírgula opcional
+		p.consumeOptionalSemicolon()
+
+		fields = append(fields, &FieldDecl{
+			Name:      fieldName,
+			Type:      typ,
+			IsPrivate: isPrivate,
+		})
+	}
+
+	return fields
+}
+
+func (p *Parser) syncStructField() {
+	// Avança até encontrar próximo campo ou fim do struct
+	for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
+		if p.cur.Lexeme == ";" {
+			p.advanceToken()
+			return
+		}
+		// Verifica se é início de próximo campo
+		if p.cur.Lexeme == "private" || isTypeKeyword(p.cur.Lexeme) || p.cur.Type == lexer.IDENT {
+			return
+		}
+		p.advanceToken()
+	}
+}
+
+// ============================
+// Implementações (Comportamento)
+// ============================
+
+// parseImplementDecl lida com 'implement Name { ... }'
+func (p *Parser) parseImplementDecl() Stmt {
+	p.advanceToken() // consume 'implement'
+
+	if p.cur.Type != lexer.IDENT {
+		p.errorf("expected struct name to implement")
+		return nil
+	}
+	targetName := p.cur.Lexeme
+	p.advanceToken()
+
+	if !p.expectAndConsume("{") {
+		return nil
+	}
+
+	init, methods := p.parseImplementBody()
+
+	if !p.expectAndConsume("}") {
+		return nil
+	}
+
+	return &ImplDecl{
+		TargetName: targetName,
+		Init:       init,
+		Methods:    methods,
+	}
+}
+
+func (p *Parser) parseImplementBody() (*InitDecl, []*MethodDecl) {
+	var initDecl *InitDecl
+	methods := make([]*MethodDecl, 0, 4)
+
+	for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
+		// Ignorar pontos e vírgulas
+		if p.cur.Lexeme == ";" {
+			p.advanceToken()
+			continue
+		}
+
+		// Parse Init (Construtor)
+		if p.cur.Lexeme == "init" {
+			if initDecl != nil {
+				p.errorf("multiple init blocks defined")
+			}
+			initDecl = p.parseInitDecl()
+			continue
+		}
+
+		// Parse Métodos
+		// Verifica se tem prefixo 'generic' para métodos genéricos
+		var memberGenerics []*GenericParam
+		if p.cur.Lexeme == "generic" && p.nxt.Lexeme == "<" {
+			memberGenerics = p.parseGenericParamsWithPrefix()
+		}
+
+		// Parse Tipo de Retorno
+		returnType := p.parseType()
+		if returnType == nil {
+			p.errorf("expected return type for method")
+			p.syncClassMember()
+			continue
+		}
+
+		// Expectativa: Identificador do método
+		if p.cur.Type != lexer.IDENT {
+			p.errorf("expected method name")
+			p.syncClassMember()
+			continue
+		}
+
+		methodName := p.cur.Lexeme
 		p.advanceToken()
 
 		params := p.parseFunctionParameters()
 		body := p.parseFunctionBody()
 
-		return &FunctionDecl{
-			Name:       name,
-			Generics:   generics,
+		methods = append(methods, &MethodDecl{
+			Name:       methodName,
+			Generics:   memberGenerics,
 			Params:     params,
 			ReturnType: returnType,
 			Body:       body,
-		}
+		})
 	}
+
+	return initDecl, methods
 }
 
-func (p *Parser) parseGenericFunctionDecl() Stmt {
-	generics := p.parseGenericParamsWithPrefix()
-	if generics == nil {
-		return nil
-	}
-
-	returnType := p.parseType()
-	if returnType == nil || !p.expectAndConsume("function") || p.cur.Type != lexer.IDENT {
-		return nil
-	}
-
-	name := p.cur.Lexeme
-	p.advanceToken()
+func (p *Parser) parseInitDecl() *InitDecl {
+	p.advanceToken() // consume 'init'
 
 	params := p.parseFunctionParameters()
 	body := p.parseFunctionBody()
 
-	return &FunctionDecl{
-		Name:       name,
-		Generics:   generics,
-		Params:     params,
-		ReturnType: returnType,
-		Body:       body,
+	return &InitDecl{Params: params, Body: body}
+}
+
+// syncClassMember (agora syncImplMember) avança o parser
+func (p *Parser) syncClassMember() {
+	p.advanceToken()
+	for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
+		if p.cur.Lexeme == ";" {
+			p.advanceToken()
+			return
+		}
+		if p.cur.Lexeme == "init" || p.cur.Lexeme == "generic" {
+			return
+		}
+		// Heurística de tipo
+		if isTypeKeyword(p.cur.Lexeme) {
+			return
+		}
+		p.advanceToken()
 	}
 }
 
@@ -218,16 +390,20 @@ func (p *Parser) parseFunctionParameters() []*Param {
 	params := make([]*Param, 0, 4)
 
 	for {
-		paramType := p.parseType()
-		if paramType == nil || p.cur.Type != lexer.IDENT {
-			p.errorf("expected parameter name")
+		typ := p.parseType()
+		if typ == nil {
+			p.errorf("expected parameter type")
+			p.syncTo(")")
 			return nil
 		}
 
-		params = append(params, &Param{
-			Name: p.cur.Lexeme,
-			Type: paramType,
-		})
+		if p.cur.Type != lexer.IDENT {
+			p.errorf("expected parameter name")
+			p.syncTo(")")
+			return nil
+		}
+
+		params = append(params, &Param{Name: p.cur.Lexeme, Type: typ})
 		p.advanceToken()
 
 		if p.cur.Lexeme == ")" {
@@ -236,6 +412,7 @@ func (p *Parser) parseFunctionParameters() []*Param {
 		}
 
 		if !p.expectAndConsume(",") {
+			p.syncTo(")")
 			return nil
 		}
 	}
@@ -245,386 +422,19 @@ func (p *Parser) parseFunctionParameters() []*Param {
 
 func (p *Parser) parseFunctionBody() []Stmt {
 	if p.cur.Lexeme != "{" {
-		p.errorf("expected '{' for function body")
+		p.errorf("expected '{' to start function/method body")
 		return nil
 	}
 	return p.parseBlock()
 }
 
 // ============================
-// Classes
+// Tratamento de Generics Top-Level
 // ============================
 
-func (p *Parser) parseClass() Stmt {
-	// Verificar se é classe genérica
+// parseGenericDeclaration lida com 'generic<T> ...'
+func (p *Parser) parseGenericDeclaration() Stmt {
 	generics := p.parseGenericParamsWithPrefix()
-
-	if !p.expectAndConsume("class") {
-		return nil
-	}
-
-	if p.cur.Type != lexer.IDENT {
-		p.errorf("expected class name")
-		return nil
-	}
-
-	name := p.cur.Lexeme
-	p.advanceToken()
-
-	// Se não tinha generics no prefixo, verificar se tem após o nome
-	if generics == nil && p.cur.Lexeme == "<" {
-		generics = p.parseGenericParamsList()
-	}
-
-	if !p.expectAndConsume("{") {
-		return nil
-	}
-
-	fields, constructor, methods := p.parseClassMembers()
-
-	if !p.expectAndConsume("}") {
-		return nil
-	}
-
-	return &ClassDecl{
-		Name:        name,
-		Generics:    generics,
-		Fields:      fields,
-		Constructor: constructor,
-		Methods:     methods,
-	}
-}
-
-func (p *Parser) parseClassMembers() ([]*FieldDecl, *ConstructorDecl, []*MethodDecl) {
-	fields := make([]*FieldDecl, 0, 4)
-	var constructor *ConstructorDecl
-	methods := make([]*MethodDecl, 0, 4)
-
-	for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
-		if p.cur.Lexeme == "constructor" {
-			constructor = p.parseConstructor()
-			continue
-		}
-
-		// Tenta parsear generics (prefixo de método genérico)
-		generics := p.parseGenericParamsWithPrefix()
-		if generics == nil && p.cur.Lexeme == "<" {
-			// Fallback para generics sem prefixo 'generic' se a sintaxe permitir
-			generics = p.parseGenericParamsList()
-		}
-
-		// Parsear o Tipo (pode ser tipo do campo ou retorno do método)
-		typ := p.parseType()
-		if typ == nil {
-			p.errorf("expected type, 'constructor' or '}' in class definition, got %s", p.cur.Lexeme)
-			p.advanceToken() // Evita loop infinito
-			continue
-		}
-
-		// Verifica se é um método
-		if p.cur.Lexeme == "method" {
-			p.advanceToken() // consome 'method'
-
-			if p.cur.Type != lexer.IDENT {
-				p.errorf("expected method name")
-				continue
-			}
-			methodName := p.cur.Lexeme
-			p.advanceToken()
-
-			params := p.parseFunctionParameters()
-			body := p.parseFunctionBody()
-
-			methods = append(methods, &MethodDecl{
-				Name:       methodName,
-				Generics:   generics,
-				Params:     params,
-				ReturnType: typ,
-				Body:       body,
-			})
-		} else {
-			// É um campo
-			if generics != nil {
-				p.errorf("fields cannot have generic parameters")
-			}
-
-			if p.cur.Type != lexer.IDENT {
-				p.errorf("expected field name, got %s", p.cur.Lexeme)
-				p.advanceToken()
-				continue
-			}
-
-			fieldName := p.cur.Lexeme
-			p.advanceToken()
-			p.consumeOptionalSemicolon()
-
-			fields = append(fields, &FieldDecl{Name: fieldName, Type: typ})
-		}
-	}
-
-	return fields, constructor, methods
-}
-
-// parseFieldDecl parseia um campo de classe/struct
-// Sintaxe: tipo nome [;]
-// NOTA: Mantido para uso em parseTypeBody, mas parseClassMembers/StructMembers agora implementam a lógica inline
-func (p *Parser) parseFieldDecl() *FieldDecl {
-	// Parsear tipo
-	typ := p.parseType()
-	if typ == nil {
-		p.errorf("expected type for field declaration")
-		return nil
-	}
-
-	// Verificar nome do campo
-	if p.cur.Type != lexer.IDENT {
-		p.errorf("expected field name, got %s (%s)", p.cur.Lexeme, p.cur.Type)
-		return nil
-	}
-
-	name := p.cur.Lexeme
-	p.advanceToken()
-
-	// Consumir ponto-e-vírgula opcional
-	p.consumeOptionalSemicolon()
-
-	return &FieldDecl{Name: name, Type: typ}
-}
-
-func (p *Parser) parseConstructor() *ConstructorDecl {
-	p.advanceToken() // consume 'constructor'
-
-	params := p.parseFunctionParameters()
-	body := p.parseFunctionBody()
-
-	return &ConstructorDecl{Params: params, Body: body}
-}
-
-// parseMethod mantido se necessário por outras chamadas, mas a lógica principal foi movida para Members
-func (p *Parser) parseMethod() *MethodDecl {
-	// Verificar se é método genérico
-	generics := p.parseGenericParamsWithPrefix()
-
-	// Se não tinha generics no prefixo, verificar se tem antes do tipo de retorno
-	if generics == nil && p.cur.Lexeme == "<" {
-		generics = p.parseGenericParamsList()
-	}
-
-	returnType := p.parseType()
-	if returnType == nil || !p.expectAndConsume("method") || p.cur.Type != lexer.IDENT {
-		return nil
-	}
-
-	name := p.cur.Lexeme
-	p.advanceToken()
-
-	params := p.parseFunctionParameters()
-	body := p.parseFunctionBody()
-
-	return &MethodDecl{
-		Name:       name,
-		Generics:   generics,
-		Params:     params,
-		ReturnType: returnType,
-		Body:       body,
-	}
-}
-
-// ============================
-// Structs
-// ============================
-
-// parseStructDecl parseia uma declaração de struct
-// Sintaxe: [generic<T>] struct Name [<T>] { campos... }
-func (p *Parser) parseStructDecl(generics []*GenericParam) Stmt {
-	// Se generics ainda não foi parseado, tentar parsear
-	if generics == nil {
-		generics = p.parseGenericParamsWithPrefix()
-	}
-
-	if !p.expectAndConsume("struct") {
-		return nil
-	}
-
-	if p.cur.Type != lexer.IDENT {
-		p.errorf("expected struct name")
-		return nil
-	}
-
-	name := p.cur.Lexeme
-	p.advanceToken()
-
-	// Se não tinha generics no prefixo, verificar se tem após o nome
-	if generics == nil && p.cur.Lexeme == "<" {
-		generics = p.parseGenericParamsList()
-	}
-
-	if !p.expectAndConsume("{") {
-		return nil
-	}
-
-	// Parsear campos e métodos
-	fields, constructor, methods := p.parseStructMembers()
-
-	if !p.expectAndConsume("}") {
-		return nil
-	}
-
-	// Retorna como ClassDecl pois a AST usa isso para estruturas com métodos
-	return &ClassDecl{
-		Name:        name,
-		Generics:    generics,
-		Fields:      fields,
-		Constructor: constructor,
-		Methods:     methods,
-	}
-}
-
-// parseStructMembers parseia os membros de uma struct (campos e métodos)
-func (p *Parser) parseStructMembers() ([]*FieldDecl, *ConstructorDecl, []*MethodDecl) {
-	fields := make([]*FieldDecl, 0, 4)
-	var constructor *ConstructorDecl
-	methods := make([]*MethodDecl, 0, 4)
-
-	for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
-		if p.cur.Lexeme == "constructor" {
-			constructor = p.parseConstructor()
-			continue
-		}
-
-		// 1. Tentar parsear Generics (opcional, para métodos)
-		generics := p.parseGenericParamsWithPrefix()
-		if generics == nil && p.cur.Lexeme == "<" {
-			generics = p.parseGenericParamsList()
-		}
-
-		// 2. Parsear Tipo Comum (Tipo do Campo ou Retorno do Método)
-		typ := p.parseType()
-		if typ == nil {
-			p.errorf("expected type, 'constructor' or '}' in struct, got %s", p.cur.Lexeme)
-			p.advanceToken()
-			continue
-		}
-
-		// 3. Decidir se é Método ou Campo
-		if p.cur.Lexeme == "method" {
-			// É um método
-			p.advanceToken() // consome 'method'
-
-			if p.cur.Type != lexer.IDENT {
-				p.errorf("expected method name")
-				continue
-			}
-			methodName := p.cur.Lexeme
-			p.advanceToken()
-
-			params := p.parseFunctionParameters()
-			body := p.parseFunctionBody()
-
-			methods = append(methods, &MethodDecl{
-				Name:       methodName,
-				Generics:   generics,
-				Params:     params,
-				ReturnType: typ,
-				Body:       body,
-			})
-		} else {
-			// É um campo
-			if generics != nil {
-				p.errorf("struct fields cannot have generic parameters")
-			}
-
-			if p.cur.Type != lexer.IDENT {
-				p.errorf("expected field name, got %s", p.cur.Lexeme)
-				p.advanceToken()
-				continue
-			}
-
-			fieldName := p.cur.Lexeme
-			p.advanceToken()
-
-			p.consumeOptionalSemicolon()
-
-			fields = append(fields, &FieldDecl{Name: fieldName, Type: typ})
-		}
-	}
-
-	return fields, constructor, methods
-}
-
-// ============================
-// Declarações de Tipos
-// ============================
-
-func (p *Parser) parseTypeDecl() Stmt {
-	var generics []*GenericParam
-	var hasGenericPrefix bool
-
-	// Verificar se é tipo genérico com prefixo
-	if p.cur.Lexeme == "generic" && p.nxt.Lexeme == "<" {
-		generics = p.parseGenericParamsWithPrefix()
-		if generics == nil {
-			return nil
-		}
-		hasGenericPrefix = true
-	}
-
-	if !hasGenericPrefix {
-		p.advanceToken() // consume 'type'
-	} else if !p.expectAndConsume("type") {
-		return nil
-	}
-
-	if p.cur.Type != lexer.IDENT {
-		p.errorf("expected type name after 'type'")
-		return nil
-	}
-
-	name := p.cur.Lexeme
-	p.advanceToken()
-
-	// Verificar parâmetros genéricos após o nome
-	if !hasGenericPrefix && p.cur.Lexeme == "<" {
-		generics = p.parseGenericParamsList()
-	}
-
-	typ := p.parseTypeBody()
-	if typ == nil {
-		return nil
-	}
-
-	return &TypeDecl{Name: name, Generics: generics, Type: typ}
-}
-
-func (p *Parser) parseTypeBody() Type {
-	if p.cur.Lexeme != "{" {
-		return p.parseType()
-	}
-
-	p.advanceToken() // consume '{'
-	fields := make([]*FieldDecl, 0, 4)
-
-	for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
-		field := p.parseFieldDecl()
-		if field != nil {
-			fields = append(fields, field)
-		}
-	}
-
-	if !p.expectAndConsume("}") {
-		return nil
-	}
-
-	return &StructType{Fields: fields}
-}
-
-// ============================
-// Generic Top Level
-// ============================
-
-// parseGenericTopLevel lida com declarações que começam com <T>
-func (p *Parser) parseGenericTopLevel() Stmt {
-	generics := p.parseGenericParamsList() // Consome <T>
 	if generics == nil {
 		return nil
 	}
@@ -632,44 +442,17 @@ func (p *Parser) parseGenericTopLevel() Stmt {
 	switch p.cur.Lexeme {
 	case "struct":
 		return p.parseStructDecl(generics)
-	case "class":
-		// Salvar estado e tentar parsear como classe
-		p.advanceToken() // consume 'class'
 
-		if p.cur.Type != lexer.IDENT {
-			p.errorf("expected class name")
-			return nil
-		}
-
-		name := p.cur.Lexeme
-		p.advanceToken()
-
-		if !p.expectAndConsume("{") {
-			return nil
-		}
-
-		fields, constructor, methods := p.parseClassMembers()
-
-		if !p.expectAndConsume("}") {
-			return nil
-		}
-
-		return &ClassDecl{
-			Name:        name,
-			Generics:    generics,
-			Fields:      fields,
-			Constructor: constructor,
-			Methods:     methods,
-		}
 	default:
-		// Pode ser uma função: <T> int function...
+		// Assume Função Genérica: generic<T> Type function ...
 		returnType := p.parseType()
 		if returnType == nil {
+			p.errorf("expected struct or return type after generics")
 			return nil
 		}
 
 		if !p.expectAndConsume("function") {
-			p.errorf("expected 'function', 'struct', or 'class' after generic parameters")
+			p.errorf("expected 'function' keyword")
 			return nil
 		}
 
@@ -692,4 +475,84 @@ func (p *Parser) parseGenericTopLevel() Stmt {
 			Body:       body,
 		}
 	}
+}
+
+// parseGenericTopLevel lida com atalho '<T> ...'
+func (p *Parser) parseGenericTopLevel() Stmt {
+	generics := p.parseGenericParamsList()
+	if generics == nil {
+		return nil
+	}
+
+	switch p.cur.Lexeme {
+	case "struct":
+		return p.parseStructDecl(generics)
+
+	default:
+		returnType := p.parseType()
+		if returnType == nil {
+			return nil
+		}
+		if !p.expectAndConsume("function") {
+			return nil
+		}
+		if p.cur.Type != lexer.IDENT {
+			return nil
+		}
+		name := p.cur.Lexeme
+		p.advanceToken()
+		params := p.parseFunctionParameters()
+		body := p.parseFunctionBody()
+		return &FunctionDecl{Name: name, Generics: generics, Params: params, ReturnType: returnType, Body: body}
+	}
+}
+
+// ============================
+// Declarações de Tipos (Alias/Structs antigos)
+// ============================
+
+func (p *Parser) parseTypeDecl() Stmt {
+	var generics []*GenericParam
+	var hasGenericPrefix bool
+
+	if p.cur.Lexeme == "generic" && p.nxt.Lexeme == "<" {
+		generics = p.parseGenericParamsWithPrefix()
+		hasGenericPrefix = true
+	}
+
+	if !hasGenericPrefix {
+		p.advanceToken() // consome 'type'
+	} else if !p.expectAndConsume("type") {
+		return nil
+	}
+
+	if p.cur.Type != lexer.IDENT {
+		p.errorf("expected type name")
+		return nil
+	}
+
+	name := p.cur.Lexeme
+	p.advanceToken()
+
+	if !hasGenericPrefix && p.cur.Lexeme == "<" {
+		generics = p.parseGenericParamsList()
+	}
+
+	typ := p.parseTypeBody()
+
+	return &TypeDecl{Name: name, Generics: generics, Type: typ}
+}
+
+func (p *Parser) parseTypeBody() Type {
+	if p.cur.Lexeme == "{" {
+		// Modo legacy para type alias de struct anonima, se necessário
+		// Reutiliza parseStructFields mas retorna StructType
+		p.advanceToken()
+		fields := p.parseStructFields()
+		if !p.expectAndConsume("}") {
+			return nil
+		}
+		return &StructType{Fields: fields}
+	}
+	return p.parseType()
 }

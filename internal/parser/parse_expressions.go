@@ -203,11 +203,9 @@ func (p *Parser) parseKeywordExpr() Expr {
 	case "null":
 		p.advanceToken()
 		return &NullLiteral{}
-	case "new":
-		return p.parseNewExpr()
-	case "this":
+	case "self":
 		p.advanceToken()
-		return &ThisExpr{}
+		return &SelfExpr{}
 	case "generic":
 		return p.parseGenericCallOrExpr()
 	case "set", "map":
@@ -237,7 +235,7 @@ func (p *Parser) parseOperatorExpr() Expr {
 		return p.parseBraceLiteral()
 	case "[":
 		return p.parseArrayLiteral()
-	case "-", "!", "+", "++", "--":
+	case "-", "!", "+", "++", "--", "*":
 		return p.parsePrefixExpr()
 	default:
 		p.errorf("unexpected operator: %s", p.cur.Lexeme)
@@ -766,45 +764,12 @@ func (p *Parser) parseMapLiteral() Expr {
 func (p *Parser) parseGenericCallOrExpr() Expr {
 	p.advanceToken() // consume 'generic'
 
-	// Usar nova lógica unificada
 	typeArgs := p.parseTypeArgumentsList()
 	if typeArgs == nil {
 		return nil
 	}
 
-	// Adicionado suporte para 'new' após generic<...> (ex: generic<int> new Container())
-	if p.cur.Lexeme == "new" {
-		p.advanceToken() // consume 'new'
-
-		if p.cur.Type != lexer.IDENT {
-			p.errorf("expected type name after 'new'")
-			return nil
-		}
-
-		typeName := p.cur.Lexeme
-		p.advanceToken()
-
-		if !p.expectAndConsume("(") {
-			return nil
-		}
-
-		var args []Expr
-		if p.cur.Lexeme != ")" {
-			args = p.parseArgumentList()
-		}
-
-		if !p.expectAndConsume(")") {
-			return nil
-		}
-
-		return &NewExpr{
-			TypeName: typeName,
-			TypeArgs: typeArgs,
-			Args:     args,
-		}
-	}
-
-	// Verifica se é uma chamada de função ou referência
+	// 1. Caso: Chamada de Função Genérica -> generic<T> funcName(...)
 	if p.cur.Type == lexer.IDENT {
 		ident := &Identifier{Name: p.cur.Lexeme}
 		p.advanceToken()
@@ -812,13 +777,9 @@ func (p *Parser) parseGenericCallOrExpr() Expr {
 		// Se tiver parênteses, é uma chamada de função
 		if p.cur.Lexeme == "(" {
 			p.advanceToken() // consume '('
-
 			var args []Expr
 			if p.cur.Lexeme != ")" {
 				args = p.parseArgumentList()
-				if args == nil {
-					return nil
-				}
 			}
 
 			if !p.expectAndConsume(")") {
@@ -832,7 +793,7 @@ func (p *Parser) parseGenericCallOrExpr() Expr {
 			}
 		}
 
-		// Se não tem parênteses, é apenas uma referência
+		// Se não tem parênteses, é apenas uma referência especializada
 		return &GenericCallExpr{
 			Callee:   ident,
 			TypeArgs: typeArgs,
@@ -840,7 +801,7 @@ func (p *Parser) parseGenericCallOrExpr() Expr {
 		}
 	}
 
-	// Verifica se é um array literal
+	// 2. Caso: Literal de Array Genérico -> generic<T> [ ... ]
 	if p.cur.Lexeme == "[" {
 		arrayLit := p.parseArrayLiteral()
 		if arrayLit == nil {
@@ -853,47 +814,6 @@ func (p *Parser) parseGenericCallOrExpr() Expr {
 		}
 	}
 
-	p.errorf("expected identifier, 'new' or array literal after generic type arguments, got %s", p.cur.Lexeme)
+	p.errorf("expected identifier or array literal after generic type arguments, got %s", p.cur.Lexeme)
 	return nil
-}
-
-func (p *Parser) parseNewExpr() Expr {
-	p.advanceToken() // consume 'new'
-
-	if p.cur.Type != lexer.IDENT {
-		p.errorf("expected type name after 'new'")
-		return nil
-	}
-
-	typeName := p.cur.Lexeme
-	p.advanceToken()
-
-	var typeArgs []Type
-	if p.cur.Lexeme == "generic" {
-		p.advanceToken() // consume 'generic'
-		// Usar nova lógica unificada
-		typeArgs = p.parseTypeArgumentsList()
-		if typeArgs == nil {
-			return nil
-		}
-	}
-
-	if !p.expectAndConsume("(") {
-		return nil
-	}
-
-	var args []Expr
-	if p.cur.Lexeme != ")" {
-		args = p.parseArgumentList()
-	}
-
-	if !p.expectAndConsume(")") {
-		return nil
-	}
-
-	return &NewExpr{
-		TypeName: typeName,
-		TypeArgs: typeArgs,
-		Args:     args,
-	}
 }

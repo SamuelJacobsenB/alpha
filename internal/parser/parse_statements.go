@@ -8,7 +8,6 @@ import "github.com/alpha/internal/lexer"
 
 // parseTopLevel analisa declarações e statements de nível superior
 func (p *Parser) parseTopLevel() Stmt {
-	// ... (Código de pular ;)
 	for p.cur.Lexeme == ";" {
 		p.advanceToken()
 	}
@@ -22,10 +21,10 @@ func (p *Parser) parseTopLevel() Stmt {
 		return p.parseAndConsume(p.parseVarDecl)
 	case "const":
 		return p.parseAndConsume(p.parseConstDecl)
-	case "class":
-		return p.parseClass()
 	case "struct":
 		return p.parseStructDecl(nil)
+	case "implement":
+		return p.parseImplementDecl()
 	case "type":
 		return p.parseTypeDecl()
 	case "generic":
@@ -50,12 +49,25 @@ func (p *Parser) parseAndConsume(fn func() Stmt) Stmt {
 
 // parseDefaultStmt lida com declarações de função e statements de expressão
 func (p *Parser) parseDefaultStmt() Stmt {
-	if isTypeKeyword(p.cur.Lexeme) {
-		if p.nxt.Lexeme == "function" {
+	// Heurística para detectar declarações de variáveis com tipos customizados:
+	// 1. É uma keyword de tipo (int, string...)
+	// 2. OU Identificador seguido de Identificador (ex: MyClass obj)
+	// 3. OU Identificador seguido de '<' (ex: List<T> list), assumindo sintaxe genérica
+	// 4. OU Identificador seguido de '[' (ex: MyType[] list), assumindo array
+	seemsLikeType := isTypeKeyword(p.cur.Lexeme) ||
+		(p.cur.Type == lexer.IDENT && p.nxt.Type == lexer.IDENT) ||
+		(p.cur.Type == lexer.IDENT && p.nxt.Lexeme == "<") ||
+		(p.cur.Type == lexer.IDENT && p.nxt.Lexeme == "[")
+
+	if seemsLikeType {
+		// Se o próximo token é 'function', é uma declaração de função: Tipo function ...
+		// OU se for: MyType function ...
+		if p.nxt.Lexeme == "function" || (p.cur.Type == lexer.IDENT && p.nxt.Lexeme == "function") {
 			return p.parseFunctionDecl(false)
 		}
 		return p.parseAndConsume(p.parseTypedVarDecl)
 	}
+
 	return p.parseAndConsume(p.parseExprStmt)
 }
 
@@ -362,7 +374,12 @@ func (p *Parser) parseForLoopInitializer() Stmt {
 		return p.parseVarDecl()
 	}
 
-	if isTypeKeyword(p.cur.Lexeme) {
+	// Heurística de tipos customizados no loop for também
+	seemsLikeType := isTypeKeyword(p.cur.Lexeme) ||
+		(p.cur.Type == lexer.IDENT && p.nxt.Type == lexer.IDENT) ||
+		(p.cur.Type == lexer.IDENT && p.nxt.Lexeme == "<")
+
+	if seemsLikeType {
 		savedCur, savedNxt := p.cur, p.nxt
 		decl := p.parseTypedVarDecl()
 		if decl != nil {

@@ -71,19 +71,27 @@ type FunctionDecl struct {
 func (f *FunctionDecl) stmtNode() {}
 func (f *FunctionDecl) nodePos()  {}
 
-// ClassDecl representa uma declaração de classe
-type ClassDecl struct {
-	Name        string
-	Generics    []*GenericParam
-	Fields      []*FieldDecl
-	Constructor *ConstructorDecl
-	Methods     []*MethodDecl
+// StructDecl representa a definição de dados de uma estrutura
+type StructDecl struct {
+	Name     string
+	Generics []*GenericParam
+	Fields   []*FieldDecl
 }
 
-func (c *ClassDecl) stmtNode() {}
-func (c *ClassDecl) nodePos()  {}
+func (s *StructDecl) stmtNode() {}
+func (s *StructDecl) nodePos()  {}
 
-// TypeDecl representa uma declaração de tipo
+// ImplDecl representa um bloco de implementação (métodos e init)
+type ImplDecl struct {
+	TargetName string    // Nome da struct que está sendo implementada
+	Init       *InitDecl // Construtor (opcional)
+	Methods    []*MethodDecl
+}
+
+func (i *ImplDecl) stmtNode() {}
+func (i *ImplDecl) nodePos()  {}
+
+// TypeDecl representa uma declaração de alias de tipo
 type TypeDecl struct {
 	Name     string
 	Generics []*GenericParam
@@ -322,11 +330,11 @@ type MemberExpr struct {
 func (m *MemberExpr) exprNode() {}
 func (m *MemberExpr) nodePos()  {}
 
-// ThisExpr representa a palavra-chave 'this'
-type ThisExpr struct{}
+// SelfExpr representa a referência à própria instância (substitui ThisExpr)
+type SelfExpr struct{}
 
-func (t *ThisExpr) exprNode() {}
-func (t *ThisExpr) nodePos()  {}
+func (t *SelfExpr) exprNode() {}
+func (t *SelfExpr) nodePos()  {}
 
 // ============================
 // Expressões de Coleções
@@ -402,16 +410,6 @@ type ReferenceExpr struct {
 
 func (*ReferenceExpr) exprNode() {}
 func (*ReferenceExpr) nodePos()  {}
-
-// NewExpr representa uma expressão de criação de objeto (new)
-type NewExpr struct {
-	TypeName string
-	TypeArgs []Type
-	Args     []Expr
-}
-
-func (n *NewExpr) exprNode() {}
-func (n *NewExpr) nodePos()  {}
 
 // GenericCallExpr representa uma chamada de função genérica
 type GenericCallExpr struct {
@@ -554,19 +552,20 @@ func (p *Param) nodePos() {}
 
 // FieldDecl representa uma declaração de campo
 type FieldDecl struct {
-	Name string
-	Type Type
+	Name      string
+	Type      Type
+	IsPrivate bool // Flag para campos privados
 }
 
 func (f *FieldDecl) nodePos() {}
 
-// ConstructorDecl representa um construtor de classe
-type ConstructorDecl struct {
+// InitDecl representa um construtor (init)
+type InitDecl struct {
 	Params []*Param
 	Body   []Stmt
 }
 
-func (c *ConstructorDecl) nodePos() {}
+func (c *InitDecl) nodePos() {}
 
 // MethodDecl representa uma declaração de método
 type MethodDecl struct {

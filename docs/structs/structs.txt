@@ -1,0 +1,49 @@
+package example
+
+// simple
+
+struct Message {
+    string text
+    string sender
+}
+Message message = Message {
+    text: "This is a message",
+    sender: "Samuel",
+}
+
+generic<T> struct Car {
+    T motor
+    int year
+}
+Car car = generic<string> Car {
+    motor: "654MT4",
+    year: 2001,
+}
+
+// -------------------------
+
+struct Man {
+    int age
+    private string cpf
+}
+var man = {
+    age: 24
+}
+
+struct User {
+    string email
+    private string password
+}
+
+implement User {
+    init(string email, string password) {
+        self.email = email
+        self.password = password
+    }
+
+    generic<T> bool validatePassword() {
+        return typeof(password) == T
+    } 
+}
+
+var user = User("email@email.com", "Senha12345")

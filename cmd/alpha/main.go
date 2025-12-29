@@ -33,59 +33,70 @@ func main() {
 
 	switch caseName {
 	case "variables":
-		testCase("Declarações tipadas", `
-			int num
-			int num1 = 10
+		testCase("Variáveis Simples", `
+        int num
+		int num1 = 10
+		var num2 = 20
+		const num3 = 30
+    `)
 
-			float flt
-			float flt1 = 3.14
+		testCase("Variáveis Nulas", `
+		int? num4 // null
+		int? num5 = 10
+		int? num6 = null
+    `)
 
-			string str
-			string str1 = "Hello World!"
+		testCase("Arrays", `
+		string[2] arr
+		string[2] arr2 = ["Hello", "World"]
+		var arr3 = ["Hello", "World"] // string[2] 
+		string[] linked
+	`)
 
-			bool bl
-			bool bl1 = true
+		testCase("Matrixes", `
+		int[2][2] matrix
+		int[2][2] matrix2 = [
+			[1, 2],
+			[3, 4]
+		]
+		var matrix3 = [
+			[1, 2],
+			[3, 4]
+		]
+		int[][] matrix4
+		int[][] matrix5 = [
+			[1, 2],
+			[3, 4]
+		]
+	`)
+
+		testCase("Ponteiros", `
+		int value = 42
+		int* ptr = &value
+		int** ptr2 = &ptr
+		var val = *ptr
 		`)
 
-		testCase("Declarações autoinferidas", `
-			var num = 10
+		testCase("Maps", `
+		map<int, string> mapTest = map<int, string>{
+			1: "Hello",
+			2: "Bye",
+		}
 
-			var flt = 3.14
+		var mapTest2 = map<int, string>{
+			1: "Hello",
+			2: "Bye",
+		}
 
-			var str = "Hello World!"
-
-			var bl = false
+		map<int, string> mapTest3
 		`)
 
-		testCase("Declarações constantes", `
-			const num = 10
+		testCase("Union types", `
+		string | float types2 // ""
+		types2 = 3.1415
 
-			const flt = 3.14
-
-			const str = "Hello World!"
-
-			const bl = false
-		`)
-
-		testCase("Declarações de arrays", `
-			int[] num
-			int[] num1 = [10, 20]
-
-			float[] flt
-			float[] flt1 = [3.14, 5]
-
-			string[] str
-			string[] str1 = ["Hello World!"]
-
-			bool[] bl
-			bool[] bl1 = [true, true, false]
-
-			int[5] fixed = [1, 2, 3, 4, 5]
-		`)
-
-		testCase("Declarações de referências", `
-			var num = 10
-			int* num1 = &num
+		string | float | int types3 // ""
+		types3 = "Hello"
 		`)
 
 	case "conditions":
@@ -271,11 +282,6 @@ func main() {
 			Number num2 = 3.14
 		`)
 
-		testCase("Type alias com genéricos", `
-			generic<T> type Pair [T, T]
-			Pair coordinates = generic<int> [10, 20]
-		`)
-
 		testCase("Nullable types", `
 			int? maybeNumber = null
 			string? maybeString = "hello"
@@ -308,171 +314,72 @@ func main() {
 		`)
 
 	case "structs":
-		testCase("Struct simples", `
-			struct Point {
-				int x
-				int y
+		// CASO 1: Struct Simples e Instanciação
+		testCase("Struct Simples (Dados)", `
+			// simple definition
+			struct Message {
+				string text
+				string sender
 			}
-			
-			Point p = Point {
-				x: 10,
-				y: 20
+
+			// instantiation
+			Message message = Message {
+				text: "This is a message",
+				sender: "Samuel",
 			}
 		`)
 
-		testCase("Struct com métodos", `
-			struct Rectangle {
-				int width
-				int height
+		// CASO 2: Struct com Genéricos
+		testCase("Struct Genérico", `
+			generic<T> struct Car {
+				T motor
+				int year
 			}
-			
-			Rectangle rect = Rectangle {
-				width: 10,
-				height: 20
+
+			// instantiation with generic type
+			Car car = generic<string> Car {
+				motor: "654MT4",
+				year: 2001,
 			}
 		`)
 
-		testCase("Struct aninhado", `
-			struct Address {
-				string street
-				string city
-			}
-			
-			struct Person {
-				string name
+		// CASO 3: Struct com Campos Privados
+		testCase("Struct com Private", `
+			struct Man {
 				int age
-				Address address
+				private string cpf
 			}
-			
-			Person person = Person {
-				name: "Alice",
-				age: 30,
-				address: Address {
-					street: "Main St",
-					city: "New York"
-				}
+
+			var man = Man {
+				age: 24
+				// cpf não deve ser acessível diretamente aqui se houver checagem semântica,
+				// mas sintaticamente o lexer deve reconhecer 'private'
 			}
 		`)
 
-		testCase("Struct com tipo genérico", `
-			generic<T> struct Box {
-				T content
+		// CASO 4: Implementação de Métodos e Construtor (Novo Padrão)
+		testCase("Struct Implementation (init & self)", `
+			struct User {
+				string email
+				private string password
 			}
-			
-			Box intBox = generic<int> Box {
-				content: 42
-			}
-			Box stringBox = generic<string> Box {
-				content: "hello"
-			}
-		`)
 
-	case "classes":
-		testCase("Classe simples", `
-			class Person {
-				string name
-				int age
-				
-				constructor(string name, int age) {
-					this.name = name
-					this.age = age
+			implement User {
+				// Construtor
+				init(string email, string password) {
+					self.email = email
+					self.password = password
 				}
-				
-				string method getName() {
-					return this.name
-				}
-			}
-			
-			Person person = new Person("Alice", 30)
-			string name = person.getName()
-		`)
 
-		testCase("Classe com herança implícita", `
-			class Animal {
-				string species
-				
-				constructor(string species) {
-					this.species = species
-				}
-				
-				string method getSpecies() {
-					return this.species
-				}
+				// Método com genéricos
+				generic<T> bool validatePassword() {
+					// Exemplo do txt: typeof(password) ou self.password
+					return typeof(self.password) == T
+				} 
 			}
-			
-			class Dog {
-				string breed
-				
-				constructor(string breed) {
-					this.breed = breed
-				}
-				
-				string method bark() {
-					return "Woof!"
-				}
-			}
-		`)
 
-		testCase("Classe com métodos estáticos", `
-			class MathUtils {
-				int method max(int a, int b) {
-					return a > b ? a : b
-				}
-				
-				float method pi() {
-					return 3.14159
-				}
-			}
-			
-			int maximum = MathUtils.max(10, 20)
-			float piValue = MathUtils.pi()
-		`)
-
-		testCase("Classe com tipo genérico", `
-			generic<T> class Container {
-				T[] items
-				
-				constructor() {
-					this.items = []
-				}
-				
-				void method add(T item) {
-					// this will add
-				}
-				
-				T method get(int index) {
-					// this will get
-				}
-			}
-			
-			Container intContainer = genric<int> new Container()
-			intContainer.add(10)
-			intContainer.add(20)
-			intContainer.get(0)
-		`)
-
-		testCase("Classe com múltiplos genéricos", `
-			generic<K, V> class Pair {
-				K key
-				V value
-				
-				constructor(K key, V value) {
-					this.key = key
-					this.value = value
-				}
-				
-				K method getKey() {
-					return this.key
-				}
-				
-				V method getValue() {
-					return this.value
-				}
-			}
-			
-			Pair entry = generic<string, int> new Pair("age", 30)
-			string key = entry.getKey()
-			int value = entry.getValue()
+			// Uso do construtor
+			var user = User("email@email.com", "Senha12345")
 		`)
 
 	default:

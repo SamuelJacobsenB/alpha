@@ -23,13 +23,30 @@ type Token struct {
 }
 
 var keywords = map[string]struct{}{
+	// Tipos primitivos
 	"int": {}, "string": {}, "float": {}, "bool": {}, "void": {},
 	"byte": {}, "char": {}, "double": {}, "error": {}, "component": {},
-	"var": {}, "const": {}, "function": {}, "class": {}, "type": {}, "enum": {},
+
+	// Declarações
+	"var": {}, "const": {}, "function": {}, "type": {}, "enum": {},
+	"struct": {}, // Mantido struct
+
+	// Controle de fluxo
 	"if": {}, "else": {}, "while": {}, "do": {}, "for": {}, "in": {}, "return": {},
 	"break": {}, "continue": {}, "switch": {}, "case": {}, "default": {},
+
+	// Literais e valores
 	"true": {}, "false": {}, "null": {},
+
+	// Módulos
 	"import": {}, "export": {}, "package": {}, "from": {}, "as": {},
-	"constructor": {}, "method": {}, "this": {}, "new": {},
-	"typeof": {}, "generic": {},
+
+	// Modificadores
+	"implement": {}, // Para blocos de implementação
+	"init":      {}, // Para construtores
+	"self":      {},
+	"private":   {}, // Modificador de acesso
+
+	// Utilitários
+	"typeof": {}, "generic": {}, "length": {},
 }
