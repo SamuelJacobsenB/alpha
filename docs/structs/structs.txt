@@ -26,19 +26,21 @@ struct Man {
     int age
     private string cpf
 }
-var man = {
+var man = Man {
     age: 24
 }
 
 struct User {
     string email
     private string password
+    public int age
 }
 
 implement User {
-    init(string email, string password) {
+    init(string email, string password, int age) {
         self.email = email
         self.password = password
+        self.age = age
     }
 
     generic<T> bool validatePassword() {
@@ -46,4 +48,4 @@ implement User {
     } 
 }
 
-var user = User("email@email.com", "Senha12345")
+var user = User { email: "email@email.com", password: "Senha12345", age: 20 }

@@ -8,21 +8,19 @@ import (
 // Constantes e Configurações
 // ============================
 
-var (
-	typeKeywords = map[string]bool{
-		"int":    true,
-		"string": true,
-		"float":  true,
-		"bool":   true,
-		"void":   true,
-		"byte":   true,
-		"char":   true,
-		"error":  true,
-		"set":    true,
-		"map":    true,
-		// Letras maiúsculas são aceitas como tipos genéricos
-	}
-)
+var typeKeywords = map[string]bool{
+	"int":    true,
+	"string": true,
+	"float":  true,
+	"bool":   true,
+	"void":   true,
+	"byte":   true,
+	"char":   true,
+	"error":  true,
+	"set":    true,
+	"map":    true,
+	// Letras maiúsculas são aceitas como tipos genéricos
+}
 
 // isTypeKeyword verifica se uma string é uma palavra-chave de tipo
 func isTypeKeyword(lex string) bool {
@@ -96,16 +94,16 @@ func (p *Parser) parseSingleType() Type {
 // parseBaseType analisa um tipo base (primitivo ou identificador)
 func (p *Parser) parseBaseType() Type {
 	name := p.cur.Lexeme
+
+	if !isTypeKeyword(name) && !(len(name) > 0 && name[0] >= 'A' && name[0] <= 'Z') {
+		return nil
+	}
+
 	p.advanceToken()
 
 	// Verificar se é um tipo genérico com parâmetros: List<T>
 	if p.cur.Lexeme == "<" {
 		return p.parseGenericType(name)
-	}
-
-	// Verificar se é uma letra maiúscula única (tipo genérico)
-	if len(name) == 1 && name[0] >= 'A' && name[0] <= 'Z' {
-		return &IdentifierType{Name: name}
 	}
 
 	// Tipo primitivo ou identificador de tipo
@@ -117,7 +115,6 @@ func (p *Parser) parseBaseType() Type {
 // ============================
 
 // parseGenericType analisa um tipo genérico (List<T>, Set<T>, Map<K,V>)
-// IMPORTANTE: Esta função espera que o nome do tipo já tenha sido consumido.
 func (p *Parser) parseGenericType(name string) Type {
 	// O token atual deve ser '<' (o nome já foi consumido)
 	if p.cur.Lexeme != "<" {

@@ -205,6 +205,9 @@ func (p *Parser) parseStructFields() []*FieldDecl {
 		if p.cur.Lexeme == "private" {
 			isPrivate = true
 			p.advanceToken()
+		} else if p.cur.Lexeme == "public" {
+			// Apenas consome 'public', pois é o padrão (ou tratado externamente)
+			p.advanceToken()
 		}
 
 		// Parse o tipo do campo
@@ -250,7 +253,7 @@ func (p *Parser) syncStructField() {
 			return
 		}
 		// Verifica se é início de próximo campo
-		if p.cur.Lexeme == "private" || isTypeKeyword(p.cur.Lexeme) || p.cur.Type == lexer.IDENT {
+		if p.cur.Lexeme == "private" || p.cur.Lexeme == "public" || isTypeKeyword(p.cur.Lexeme) || p.cur.Type == lexer.IDENT {
 			return
 		}
 		p.advanceToken()

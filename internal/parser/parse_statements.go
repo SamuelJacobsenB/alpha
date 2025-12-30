@@ -49,19 +49,13 @@ func (p *Parser) parseAndConsume(fn func() Stmt) Stmt {
 
 // parseDefaultStmt lida com declarações de função e statements de expressão
 func (p *Parser) parseDefaultStmt() Stmt {
-	// Heurística para detectar declarações de variáveis com tipos customizados:
-	// 1. É uma keyword de tipo (int, string...)
-	// 2. OU Identificador seguido de Identificador (ex: MyClass obj)
-	// 3. OU Identificador seguido de '<' (ex: List<T> list), assumindo sintaxe genérica
-	// 4. OU Identificador seguido de '[' (ex: MyType[] list), assumindo array
 	seemsLikeType := isTypeKeyword(p.cur.Lexeme) ||
 		(p.cur.Type == lexer.IDENT && p.nxt.Type == lexer.IDENT) ||
 		(p.cur.Type == lexer.IDENT && p.nxt.Lexeme == "<") ||
-		(p.cur.Type == lexer.IDENT && p.nxt.Lexeme == "[")
+		(p.cur.Type == lexer.IDENT && p.nxt.Lexeme == "[") ||
+		(p.cur.Type == lexer.IDENT && p.nxt.Lexeme == "function")
 
 	if seemsLikeType {
-		// Se o próximo token é 'function', é uma declaração de função: Tipo function ...
-		// OU se for: MyType function ...
 		if p.nxt.Lexeme == "function" || (p.cur.Type == lexer.IDENT && p.nxt.Lexeme == "function") {
 			return p.parseFunctionDecl(false)
 		}

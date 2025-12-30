@@ -45,7 +45,8 @@ var keywords = map[string]struct{}{
 	"implement": {}, // Para blocos de implementação
 	"init":      {}, // Para construtores
 	"self":      {},
-	"private":   {}, // Modificador de acesso
+	"public":    {},
+	"private":   {},
 
 	// Utilitários
 	"typeof": {}, "generic": {}, "length": {},

@@ -210,6 +210,17 @@ func (p *Parser) parseKeywordExpr() Expr {
 		return p.parseGenericCallOrExpr()
 	case "set", "map":
 		return p.parseExplicitCollectionLiteral()
+	case "typeof":
+		// Trata typeof como expressão unária/função intrínseca
+		p.advanceToken()
+		if !p.expectAndConsume("(") {
+			return nil
+		}
+		expr := p.parseExpression(LOWEST)
+		if !p.expectAndConsume(")") {
+			return nil
+		}
+		return &UnaryExpr{Op: "typeof", Expr: expr}
 	default:
 		if isTypeKeyword(p.cur.Lexeme) {
 			return nil
@@ -770,8 +781,31 @@ func (p *Parser) parseGenericCallOrExpr() Expr {
 	}
 
 	// 1. Caso: Chamada de Função Genérica -> generic<T> funcName(...)
+	//    OU Literal de Struct Genérico -> generic<T> StructName { ... }
 	if p.cur.Type == lexer.IDENT {
 		ident := &Identifier{Name: p.cur.Lexeme}
+
+		// Lookahead para diferenciar função de literal de struct
+		if p.nxt.Lexeme == "{" {
+			// É um Literal de Struct Genérico: generic<T> Car { ... }
+			// Consumimos o IDENT (nome da struct)
+			p.advanceToken()
+
+			// Parseamos o literal de chaves
+			lit := p.parseBraceLiteral()
+			if lit == nil {
+				return nil
+			}
+
+			// Retornamos uma especialização onde o Callee é o literal
+			// (Nota: Isso adapta o AST existente para suportar essa construção)
+			return &GenericSpecialization{
+				Callee:   lit,
+				TypeArgs: typeArgs,
+			}
+		}
+
+		// Caso contrário, assume-se função
 		p.advanceToken()
 
 		// Se tiver parênteses, é uma chamada de função
