@@ -1,0 +1,285 @@
+// ==============================================
+// 1. COMENTÁRIOS
+// ==============================================
+
+// I am a comment in a linked
+
+/*
+    I am a comment
+    in lots of
+    lines
+*/
+
+// ==============================================
+// 2. PACOTES E IMPORTS
+// ==============================================
+
+package main
+
+// Importação de pacotes nativos
+import alpha.math          // importação direta
+import alpha.strings as str
+
+// Importação seletiva
+import sqrt, pow from alpha.math
+import PI from alpha.math
+
+// Importação de módulos externos
+import users, getUsers as get from user
+
+// Exportações
+export processar, soma
+export func1, func2 as f2 
+
+// ==============================================
+// 3. TIPOS DE DADOS
+// ==============================================
+
+// Tipos primitivos
+byte, char, string, int, float, double, boolean, error, component, void, null
+
+// Tipos avançados
+int?                    // nullable
+int*                    // ponteiro
+int[]                   // array dinâmico
+string[5]              // array fixo
+map<int, string>       // mapa
+set<int>               // conjunto
+int | float            // union type
+
+// ==============================================
+// 4. VARIÁVEIS E CONSTANTES
+// ==============================================
+
+// Declarações básicas
+int num
+int num1 = 10
+var num2 = 20           // inferência de tipo
+const num3 = 30
+
+// Valores nullable
+int? num4               // null por padrão
+int? num5 = 10
+
+// Arrays
+string[2] arr
+string[2] arr2 = ["Hello", "World"]
+var arr3 = ["Hello", "World"]  // inferido como string[2]
+string[] linked                 // array dinâmico
+
+// Booleanos
+bool ifLogged = true
+
+// Ponteiros
+int hello = 30
+int* helloPointer = &hello
+
+// Maps
+map<int, string> mapTest = map<int, string>{
+    1: "Hello",
+    2: "Bye"
+}
+
+// Union types
+string | float types2   // ""
+types2 = 3.1415
+
+// ==============================================
+// 5. ESTRUTURAS (STRUCTS)
+// ==============================================
+
+// Struct simples
+struct Message {
+    string text
+    string sender
+}
+
+Message message = Message {
+    text: "This is a message",
+    sender: "Samuel"
+}
+
+// Struct genérica
+generic<T> struct Car {
+    T motor
+    int year
+}
+
+Car<string> car = Car<string> {
+    motor: "654MT4",
+    year: 2001
+}
+
+// Struct com campos públicos/privados
+struct User {
+    string email
+    private string password
+    public int age
+}
+
+// Implementação (métodos)
+implement User {
+    init(string email, string password, int age) {
+        self.email = email
+        self.password = password
+        self.age = age
+    }
+
+    generic<T> bool validatePassword() {
+        return typeof(password) == T
+    }
+}
+
+var user = User { 
+    email: "email@email.com", 
+    password: "Senha12345", 
+    age: 20 
+}
+
+// ==============================================
+// 6. FUNÇÕES
+// ==============================================
+
+// Função simples
+int function soma(int a, int b) {
+    return a + b
+}
+int sum = soma(5, 10)
+
+// Função com múltiplos retornos
+string, error function isOldEnough(int age) {
+    if(age < 18) {
+        return "", errors.new("User not old enough")
+    }
+    return "Ok, welcome", null
+}
+
+// Função genérica
+generic<T> string function hello(T msg) {
+    return "Hello " + msg
+}
+var message = hello<int>(30)
+
+// Função genérica com múltiplos parâmetros
+generic<A, B> string function hello(A a, B b) {
+    return string(a + b)
+}
+
+// ==============================================
+// 7. CONDICIONAIS
+// ==============================================
+
+// if-else
+int sum
+
+if(b) {
+    sum++
+} else {
+    sum--
+}
+
+// if-else if-else
+if(typeof(a) == int) {
+    sum++
+} else if (!c) {
+    sum--
+} else {
+    sum -= 2
+}
+
+// switch
+switch(sum) {
+    case 1:
+        sum++
+    case 2:
+        sum--
+    default:
+        sum = 0
+}
+
+// Operador ternário
+a = b == 10 ? 1000 : -1000
+
+// ==============================================
+// 8. LOOPS
+// ==============================================
+
+// while
+int a
+while(a < 10) {
+    a++
+}
+
+// do-while
+int b
+do {
+    b++
+} while(b < 10)
+
+// for tradicional
+for(int i = 0; i < 10; i++) {
+    a += i
+}
+
+// for-in (apenas valor)
+int[] list = [1, 2, 3, 4, 5, 6, 7]
+int sum
+for(item in list) {
+    sum += item
+}
+
+// for-in (índice e valor)
+int indexSum
+for(i, value in list) {
+    indexSum += i
+}
+
+// ==============================================
+// 9. TYPE ALIAS
+// ==============================================
+
+// Union type
+type Number = int | float
+Number num = 5.5
+
+// Generic type alias
+generic<T> type Hello T | string
+Hello hello = generic<int> 10
+
+// ==============================================
+// 10. UTILITÁRIOS/BUILT-INS
+// ==============================================
+
+// Built-in functions
+lenght(arr)                // comprimento de array/string/map/set
+append(arr, element)    // adicionar elemento a array
+remove(arr, element)        // remover elemento de map, set e arr
+removeIndex(arr, 0) // remover chave do map, set e arr
+
+// ==============================================
+// 11. PACOTES NATIVOS DISPONÍVEIS
+// ==============================================
+
+// HTTP e Web
+http, websocket, router
+
+// Dados
+json, console, strings
+
+// Matemática e tempo
+math, time, validators
+
+// Segurança e sistema
+crypto, errors, html, os, env, sql
+
+// ==============================================
+// 12. REGRAS GERAIS
+// ==============================================
+
+// - Tipos primitivos: byte, char, string, int, float, double, boolean, error, component, void, null
+// - Inclui ponteiros
+// - Erros são variáveis do tipo error
+// - Linguagem é compilada e roda em Go
+// - Operadores lógicos semelhantes aos de Javascript
+// - ; opcional (na maioria dos casos)
+// - Ponto de entrada: função main() no pacote principal

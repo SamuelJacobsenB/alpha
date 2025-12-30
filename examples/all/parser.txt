@@ -1,0 +1,3537 @@
+package parser
+
+import (
+    "fmt"
+    "strconv"
+    "strings"
+
+    "github.com/alpha/internal/lexer"
+)
+
+// ============================
+// CONSTANTES E CONFIGURAÇÕES
+// ============================
+
+const (
+    _ int = iota
+    LOWEST
+    TERNARY
+    ASSIGNMENT
+    LOGICALOR
+    LOGICALAND
+    EQUALITY
+    COMPARISON
+    SUM
+    PRODUCT
+    PREFIX
+    CALL
+    MEMBER
+    INDEX
+    POSTFIX
+)
+
+var precedences = map[string]int{
+    "?":  TERNARY,
+    "=":  ASSIGNMENT,
+    "+=": ASSIGNMENT,
+    "-=": ASSIGNMENT,
+    "*=": ASSIGNMENT,
+    "/=": ASSIGNMENT,
+    "||": LOGICALOR,
+    "&&": LOGICALAND,
+    "==": EQUALITY,
+    "!=": EQUALITY,
+    "<":  COMPARISON,
+    ">":  COMPARISON,
+    "<=": COMPARISON,
+    ">=": COMPARISON,
+    "+":  SUM,
+    "-":  SUM,
+    "*":  PRODUCT,
+    "/":  PRODUCT,
+    "%":  PRODUCT,
+    "(":  CALL,
+    ".":  MEMBER,
+    "[":  INDEX,
+    "++": POSTFIX,
+    "--": POSTFIX,
+}
+
+// Conjuntos de operadores para verificação rápida
+var (
+    infixOperators = map[string]bool{
+        "+": true, "-": true, "*": true, "/": true, "%": true,
+        ">=": true, "<=": true, ">": true, "<": true,
+        "==": true, "!=": true, "&&": true, "||": true,
+        "=": true, "+=": true, "-=": true, "*=": true, "/=": true,
+    }
+
+    postfixOperators = map[string]bool{
+        "++": true,
+        "--": true,
+    }
+
+    prefixOperators = map[string]bool{
+        "-": true, "!": true, "+": true, "++": true, "--": true, "*": true, "&": true,
+    }
+)
+
+// typeKeywords define as palavras-chave de tipo reconhecidas
+var typeKeywords = map[string]bool{
+    "int":    true,
+    "string": true,
+    "float":  true,
+    "bool":   true,
+    "void":   true,
+    "byte":   true,
+    "char":   true,
+    "error":  true,
+    "set":    true,
+    "map":    true,
+}
+
+// isTypeKeyword verifica se uma string é uma palavra-chave de tipo
+func isTypeKeyword(lex string) bool {
+    return typeKeywords[lex] || (len(lex) > 0 && lex[0] >= 'A' && lex[0] <= 'Z')
+}
+
+// GenericContext define o contexto onde generics são parseados
+type GenericContext int
+
+const (
+    GenericContextDeclaration GenericContext = iota // Para declarações: <T, U>
+    GenericContextTypeArgs                          // Para argumentos de tipo: <int, string>
+)
+
+// ParsedGenerics contém o resultado de parsear generics
+type ParsedGenerics struct {
+    Params   []*GenericParam // Para declarações: <T, U>
+    TypeArgs []Type          // Para usos: <int, string>
+}
+
+// ============================
+// INTERFACES DA AST
+// ============================
+
+// Node é a interface comum a todos os nós da AST
+type Node interface {
+    nodePos()
+}
+
+// Stmt representa uma instrução/declaração
+type Stmt interface {
+    stmtNode()
+    nodePos()
+}
+
+// Expr representa uma expressão
+type Expr interface {
+    exprNode()
+    nodePos()
+}
+
+// Type representa um tipo na linguagem
+type Type interface {
+    typeNode()
+    nodePos()
+}
+
+// ============================
+// NÓ RAIZ (PROGRAMA)
+// ============================
+
+// Program representa um programa completo
+type Program struct {
+    Body []Stmt
+}
+
+// ============================
+// DECLARAÇÕES DE MÓDULO
+// ============================
+
+// PackageDecl representa uma declaração de pacote
+type PackageDecl struct {
+    Name string
+}
+
+func (p *PackageDecl) stmtNode() {}
+func (p *PackageDecl) nodePos()  {}
+
+// ImportDecl representa uma declaração de importação
+type ImportDecl struct {
+    Path    string
+    Imports []*ImportSpec // nil para importar tudo
+}
+
+func (i *ImportDecl) stmtNode() {}
+func (i *ImportDecl) nodePos()  {}
+
+// ImportSpec representa um item de importação
+type ImportSpec struct {
+    Name  string
+    Alias string // vazio se não houver alias
+}
+
+func (i *ImportSpec) nodePos() {}
+
+// ExportDecl representa uma declaração de exportação
+type ExportDecl struct {
+    Exports []*ExportSpec
+}
+
+func (e *ExportDecl) stmtNode() {}
+func (e *ExportDecl) nodePos()  {}
+
+// ExportSpec representa um item de exportação
+type ExportSpec struct {
+    Name  string
+    Alias string // vazio se não houver alias
+}
+
+func (e *ExportSpec) nodePos() {}
+
+// ============================
+// STATEMENTS DE DECLARAÇÃO
+// ============================
+
+// VarDecl representa uma declaração de variável
+type VarDecl struct {
+    Name string
+    Type Type
+    Init Expr
+}
+
+func (v *VarDecl) stmtNode() {}
+func (v *VarDecl) nodePos()  {}
+
+// ConstDecl representa uma declaração de constante
+type ConstDecl struct {
+    Name string
+    Init Expr
+}
+
+func (c *ConstDecl) stmtNode() {}
+func (c *ConstDecl) nodePos()  {}
+
+// FunctionDecl representa uma declaração de função
+type FunctionDecl struct {
+    Name       string
+    Generics   []*GenericParam
+    Params     []*Param
+    ReturnType Type
+    Body       []Stmt
+}
+
+func (f *FunctionDecl) stmtNode() {}
+func (f *FunctionDecl) nodePos()  {}
+
+// StructDecl representa a definição de dados de uma estrutura
+type StructDecl struct {
+    Name     string
+    Generics []*GenericParam
+    Fields   []*FieldDecl
+}
+
+func (s *StructDecl) stmtNode() {}
+func (s *StructDecl) nodePos()  {}
+
+// ImplDecl representa um bloco de implementação (métodos e init)
+type ImplDecl struct {
+    TargetName string    // Nome da struct que está sendo implementada
+    Init       *InitDecl // Construtor (opcional)
+    Methods    []*MethodDecl
+}
+
+func (i *ImplDecl) stmtNode() {}
+func (i *ImplDecl) nodePos()  {}
+
+// TypeDecl representa uma declaração de alias de tipo
+type TypeDecl struct {
+    Name     string
+    Generics []*GenericParam
+    Type     Type
+}
+
+func (t *TypeDecl) stmtNode() {}
+func (t *TypeDecl) nodePos()  {}
+
+// ============================
+// COMPONENTES ESTRUTURAIS
+// ============================
+
+// GenericParam representa um parâmetro genérico
+type GenericParam struct {
+    Name string
+}
+
+func (g *GenericParam) typeNode() {}
+func (g *GenericParam) nodePos()  {}
+
+// Param representa um parâmetro de função/método
+type Param struct {
+    Name string
+    Type Type
+}
+
+func (p *Param) nodePos() {}
+
+// FieldDecl representa uma declaração de campo
+type FieldDecl struct {
+    Name      string
+    Type      Type
+    IsPrivate bool // Flag para campos privados
+}
+
+func (f *FieldDecl) nodePos() {}
+
+// InitDecl representa um construtor (init)
+type InitDecl struct {
+    Params []*Param
+    Body   []Stmt
+}
+
+func (i *InitDecl) nodePos() {}
+
+// MethodDecl representa uma declaração de método
+type MethodDecl struct {
+    Name       string
+    Generics   []*GenericParam
+    Params     []*Param
+    ReturnType Type
+    Body       []Stmt
+}
+
+func (m *MethodDecl) nodePos() {}
+
+// ============================
+// STATEMENTS DE CONTROLE DE FLUXO
+// ============================
+
+// ExprStmt representa um statement de expressão
+type ExprStmt struct {
+    Expr Expr
+}
+
+func (e *ExprStmt) stmtNode() {}
+func (e *ExprStmt) nodePos()  {}
+
+// IfStmt representa um statement if-else
+type IfStmt struct {
+    Cond Expr
+    Then []Stmt
+    Else []Stmt
+}
+
+func (i *IfStmt) stmtNode() {}
+func (i *IfStmt) nodePos()  {}
+
+// WhileStmt representa um loop while
+type WhileStmt struct {
+    Cond Expr
+    Body []Stmt
+}
+
+func (w *WhileStmt) stmtNode() {}
+func (w *WhileStmt) nodePos()  {}
+
+// DoWhileStmt representa um loop do-while
+type DoWhileStmt struct {
+    Body []Stmt
+    Cond Expr
+}
+
+func (d *DoWhileStmt) stmtNode() {}
+func (d *DoWhileStmt) nodePos()  {}
+
+// ForStmt representa um for loop tradicional
+type ForStmt struct {
+    Init Stmt
+    Cond Expr
+    Post Stmt
+    Body []Stmt
+}
+
+func (f *ForStmt) stmtNode() {}
+func (f *ForStmt) nodePos()  {}
+
+// ForInStmt representa um for-in loop
+type ForInStmt struct {
+    Index    *Identifier
+    Item     *Identifier
+    Iterable Expr
+    Body     []Stmt
+}
+
+func (f *ForInStmt) stmtNode() {}
+func (f *ForInStmt) nodePos()  {}
+
+// SwitchStmt representa um statement switch
+type SwitchStmt struct {
+    Expr  Expr
+    Cases []*CaseClause
+}
+
+func (s *SwitchStmt) stmtNode() {}
+func (s *SwitchStmt) nodePos()  {}
+
+// CaseClause representa um caso em um switch
+type CaseClause struct {
+    Value Expr
+    Body  []Stmt
+}
+
+func (c *CaseClause) nodePos() {}
+
+// ============================
+// STATEMENTS DE RETORNO E CONTROLE
+// ============================
+
+// ReturnStmt representa um statement de retorno
+type ReturnStmt struct {
+    Value Expr
+}
+
+func (r *ReturnStmt) stmtNode() {}
+func (r *ReturnStmt) nodePos()  {}
+
+// BreakStmt representa um statement break
+type BreakStmt struct{}
+
+func (b *BreakStmt) stmtNode() {}
+func (b *BreakStmt) nodePos()  {}
+
+// ContinueStmt representa um statement continue
+type ContinueStmt struct{}
+
+func (c *ContinueStmt) stmtNode() {}
+func (c *ContinueStmt) nodePos()  {}
+
+// ============================
+// STATEMENTS DE BLOCO
+// ============================
+
+// BlockStmt representa um bloco de statements
+type BlockStmt struct {
+    Body []Stmt
+}
+
+func (b *BlockStmt) stmtNode() {}
+func (b *BlockStmt) nodePos()  {}
+
+// ============================
+// EXPRESSÕES LITERAIS
+// ============================
+
+// Identifier representa um identificador (nome de variável/função)
+type Identifier struct {
+    Name string
+}
+
+func (i *Identifier) exprNode() {}
+func (i *Identifier) nodePos()  {}
+
+// IntLiteral representa um literal inteiro
+type IntLiteral struct {
+    Value int64
+}
+
+func (i *IntLiteral) exprNode() {}
+func (i *IntLiteral) nodePos()  {}
+
+// FloatLiteral representa um literal de ponto flutuante
+type FloatLiteral struct {
+    Value float64
+}
+
+func (f *FloatLiteral) exprNode() {}
+func (f *FloatLiteral) nodePos()  {}
+
+// StringLiteral representa um literal de string
+type StringLiteral struct {
+    Value string
+}
+
+func (s *StringLiteral) exprNode() {}
+func (s *StringLiteral) nodePos()  {}
+
+// BoolLiteral representa um literal booleano
+type BoolLiteral struct {
+    Value bool
+}
+
+func (b *BoolLiteral) exprNode() {}
+func (b *BoolLiteral) nodePos()  {}
+
+// NullLiteral representa o literal null
+type NullLiteral struct{}
+
+func (n *NullLiteral) exprNode() {}
+func (n *NullLiteral) nodePos()  {}
+
+// ============================
+// EXPRESSÕES DE OPERADORES
+// ============================
+
+// UnaryExpr representa uma expressão unária
+type UnaryExpr struct {
+    Op      string
+    Expr    Expr
+    Postfix bool
+}
+
+func (u *UnaryExpr) exprNode() {}
+func (u *UnaryExpr) nodePos()  {}
+
+// BinaryExpr representa uma expressão binária
+type BinaryExpr struct {
+    Left  Expr
+    Op    string
+    Right Expr
+}
+
+func (b *BinaryExpr) exprNode() {}
+func (b *BinaryExpr) nodePos()  {}
+
+// TernaryExpr representa uma expressão ternária (cond ? true : false)
+type TernaryExpr struct {
+    Cond      Expr
+    TrueExpr  Expr
+    FalseExpr Expr
+}
+
+func (t *TernaryExpr) exprNode() {}
+func (t *TernaryExpr) nodePos()  {}
+
+// AssignExpr representa uma expressão de atribuição
+type AssignExpr struct {
+    Left  Expr
+    Right Expr
+}
+
+func (a *AssignExpr) exprNode() {}
+func (a *AssignExpr) nodePos()  {}
+
+// ============================
+// EXPRESSÕES DE CHAMADA E ACESSO
+// ============================
+
+// CallExpr representa uma chamada de função
+type CallExpr struct {
+    Callee Expr
+    Args   []Expr
+}
+
+func (c *CallExpr) exprNode() {}
+func (c *CallExpr) nodePos()  {}
+
+// IndexExpr representa um acesso por índice (array/map)
+type IndexExpr struct {
+    Array Expr
+    Index Expr
+}
+
+func (i *IndexExpr) exprNode() {}
+func (i *IndexExpr) nodePos()  {}
+
+// MemberExpr representa um acesso a membro (objeto.membro)
+type MemberExpr struct {
+    Object Expr
+    Member string
+}
+
+func (m *MemberExpr) exprNode() {}
+func (m *MemberExpr) nodePos()  {}
+
+// SelfExpr representa a referência à própria instância
+type SelfExpr struct{}
+
+func (s *SelfExpr) exprNode() {}
+func (s *SelfExpr) nodePos()  {}
+
+// ============================
+// EXPRESSÕES DE COLEÇÕES
+// ============================
+
+// ArrayLiteral representa um literal de array
+type ArrayLiteral struct {
+    Elements []Expr
+}
+
+func (a *ArrayLiteral) exprNode() {}
+func (a *ArrayLiteral) nodePos()  {}
+
+// SetLiteral representa um literal de conjunto
+type SetLiteral struct {
+    Elements []Expr
+}
+
+func (s *SetLiteral) exprNode() {}
+func (s *SetLiteral) nodePos()  {}
+
+// MapLiteral representa um literal de mapa
+type MapLiteral struct {
+    Entries []*MapEntry
+}
+
+func (m *MapLiteral) exprNode() {}
+func (m *MapLiteral) nodePos()  {}
+
+// MapEntry representa uma entrada de mapa (chave: valor)
+type MapEntry struct {
+    Key   Expr
+    Value Expr
+}
+
+func (m *MapEntry) nodePos() {}
+
+// StructLiteral representa um literal de estrutura
+type StructLiteral struct {
+    Fields []*StructField
+}
+
+func (s *StructLiteral) exprNode() {}
+func (s *StructLiteral) nodePos()  {}
+
+// StructField representa um campo em um literal de estrutura
+type StructField struct {
+    Name  string
+    Value Expr
+}
+
+func (s *StructField) nodePos() {}
+
+// ============================
+// EXPRESSÕES ESPECIAIS
+// ============================
+
+// FunctionExpr representa uma expressão de função (função anônima)
+type FunctionExpr struct {
+    Generics   []*GenericParam
+    Params     []*Param
+    ReturnType Type
+    Body       []Stmt
+}
+
+func (f *FunctionExpr) exprNode() {}
+func (f *FunctionExpr) nodePos()  {}
+
+// ReferenceExpr representa uma expressão de referência (&var)
+type ReferenceExpr struct {
+    Expr Expr
+}
+
+func (r *ReferenceExpr) exprNode() {}
+func (r *ReferenceExpr) nodePos()  {}
+
+// GenericCallExpr representa uma chamada de função genérica
+type GenericCallExpr struct {
+    Callee   Expr
+    TypeArgs []Type
+    Args     []Expr
+}
+
+func (g *GenericCallExpr) exprNode() {}
+func (g *GenericCallExpr) nodePos()  {}
+
+// GenericSpecialization representa uma especialização genérica
+type GenericSpecialization struct {
+    Callee   Expr
+    TypeArgs []Type
+}
+
+func (g *GenericSpecialization) exprNode() {}
+func (g *GenericSpecialization) nodePos()  {}
+
+// ============================
+// TIPOS PRIMITIVOS E BÁSICOS
+// ============================
+
+// PrimitiveType representa um tipo primitivo (int, float, etc.)
+type PrimitiveType struct {
+    Name string
+}
+
+func (p *PrimitiveType) typeNode() {}
+func (p *PrimitiveType) nodePos()  {}
+
+// IdentifierType representa um tipo identificador
+type IdentifierType struct {
+    Name string
+}
+
+func (i *IdentifierType) typeNode() {}
+func (i *IdentifierType) nodePos()  {}
+
+// GenericType representa um tipo genérico
+type GenericType struct {
+    Name     string
+    TypeArgs []Type
+}
+
+func (g *GenericType) typeNode() {}
+func (g *GenericType) nodePos()  {}
+
+// ============================
+// TIPOS MODIFICADOS
+// ============================
+
+// ArrayType representa um tipo de array
+type ArrayType struct {
+    ElementType Type
+    Size        Expr
+}
+
+func (a *ArrayType) typeNode() {}
+func (a *ArrayType) nodePos()  {}
+
+// NullableType representa um tipo anulável (T?)
+type NullableType struct {
+    BaseType Type
+}
+
+func (n *NullableType) typeNode() {}
+func (n *NullableType) nodePos()  {}
+
+// PointerType representa um tipo ponteiro (T*)
+type PointerType struct {
+    BaseType Type
+}
+
+func (p *PointerType) typeNode() {}
+func (p *PointerType) nodePos()  {}
+
+// SetType representa um tipo conjunto (Set<T>)
+type SetType struct {
+    ElementType Type
+}
+
+func (s *SetType) typeNode() {}
+func (s *SetType) nodePos()  {}
+
+// MapType representa um tipo mapa (Map<K,V>)
+type MapType struct {
+    KeyType   Type
+    ValueType Type
+}
+
+func (m *MapType) typeNode() {}
+func (m *MapType) nodePos()  {}
+
+// UnionType representa um tipo união (T1 | T2 | T3)
+type UnionType struct {
+    Types []Type
+}
+
+func (u *UnionType) typeNode() {}
+func (u *UnionType) nodePos()  {}
+
+// StructType representa um tipo estrutura
+type StructType struct {
+    Fields []*FieldDecl
+}
+
+func (s *StructType) typeNode() {}
+func (s *StructType) nodePos()  {}
+
+// FunctionType representa um tipo função
+type FunctionType struct {
+    Params     []Type
+    ReturnType Type
+}
+
+func (f *FunctionType) typeNode() {}
+func (f *FunctionType) nodePos()  {}
+
+// ============================
+// ESTRUTURA DO PARSER
+// ============================
+
+// Parser representa o analisador sintático
+type Parser struct {
+    sc     *lexer.Scanner
+    cur    lexer.Token
+    nxt    lexer.Token
+    Errors []string
+}
+
+// ============================
+// INICIALIZAÇÃO E CONFIGURAÇÃO
+// ============================
+
+// New cria uma nova instância do parser
+func New(sc *lexer.Scanner) *Parser {
+    p := &Parser{sc: sc}
+    p.advanceToken() // Carrega primeiro token em cur
+    p.advanceToken() // Carrega segundo token em nxt
+    return p
+}
+
+// ============================
+// FUNÇÕES DE AVANÇO DE TOKENS
+// ============================
+
+// advanceToken avança para o próximo token
+func (p *Parser) advanceToken() {
+    p.cur = p.nxt
+    p.nxt = p.sc.NextToken()
+}
+
+// ============================
+// FUNÇÕES DE PARSING PRINCIPAL
+// ============================
+
+// ParseProgram analisa um programa completo
+func (p *Parser) ParseProgram() *Program {
+    body := make([]Stmt, 0, 10)
+
+    for p.cur.Type != lexer.EOF {
+        stmt := p.parseTopLevel()
+        if stmt != nil {
+            body = append(body, stmt)
+        } else {
+            // Evita loop infinito quando não consegue parsear
+            if p.cur.Type == lexer.EOF {
+                break
+            }
+            p.advanceToken() // Tenta sincronizar
+        }
+    }
+
+    return &Program{Body: body}
+}
+
+// ============================
+// FUNÇÕES DE VERIFICAÇÃO E VALIDAÇÃO
+// ============================
+
+// expectAndConsume verifica se o token atual é o esperado e consome
+func (p *Parser) expectAndConsume(expected string) bool {
+    if p.cur.Lexeme == expected {
+        p.advanceToken()
+        return true
+    }
+    p.errorf("expected '%s', got '%s'", expected, p.cur.Lexeme)
+    return false
+}
+
+// isAtStmtStart verifica se estamos no início de um statement
+func (p *Parser) isAtStmtStart() bool {
+    return p.cur.Lexeme == ";" ||
+        p.cur.Lexeme == "}" ||
+        p.cur.Type == lexer.KEYWORD ||
+        p.cur.Lexeme == "{" ||
+        isTypeKeyword(p.cur.Lexeme)
+}
+
+// ============================
+// FUNÇÕES DE SINCRONIZAÇÃO
+// ============================
+
+// syncToNextStmt sincroniza para o próximo statement após um erro
+func (p *Parser) syncToNextStmt() {
+    for !p.isAtStmtStart() && p.cur.Type != lexer.EOF {
+        p.advanceToken()
+    }
+}
+
+// syncTo sincroniza até encontrar um token específico
+func (p *Parser) syncTo(token string) {
+    for p.cur.Lexeme != token && p.cur.Type != lexer.EOF {
+        p.advanceToken()
+    }
+    if p.cur.Lexeme == token {
+        p.advanceToken()
+    }
+}
+
+// ============================
+// FUNÇÕES DE CONTROLE DE ERROS
+// ============================
+
+// errorf adiciona um erro à lista de erros
+func (p *Parser) errorf(format string, args ...interface{}) {
+    p.Errors = append(p.Errors, fmt.Sprintf(format, args...))
+}
+
+// HasErrors verifica se há erros no parser
+func (p *Parser) HasErrors() bool {
+    return len(p.Errors) > 0
+}
+
+// ErrorsText retorna todos os erros como uma única string
+func (p *Parser) ErrorsText() string {
+    return strings.Join(p.Errors, "\n")
+}
+
+// ============================
+// FUNÇÕES AUXILIARES
+// ============================
+
+// consumeOptionalSemicolon consome ponto-e-vírgula opcional
+func (p *Parser) consumeOptionalSemicolon() {
+    if p.cur.Lexeme == ";" {
+        p.advanceToken()
+    }
+}
+
+// ============================
+// PARSING DE NÍVEL SUPERIOR
+// ============================
+
+// parseTopLevel analisa declarações e statements de nível superior
+func (p *Parser) parseTopLevel() Stmt {
+    p.skipSemicolons()
+
+    if p.cur.Type == lexer.EOF {
+        return nil
+    }
+
+    switch p.cur.Lexeme {
+    case "package":
+        return p.parsePackageDecl()
+    case "import":
+        return p.parseImportDecl()
+    case "export":
+        return p.parseExportDecl()
+    case "var":
+        return p.parseAndConsume(p.parseVarDecl)
+    case "const":
+        return p.parseAndConsume(p.parseConstDecl)
+    case "struct":
+        return p.parseStructDecl(nil)
+    case "implement":
+        return p.parseImplementDecl()
+    case "type":
+        return p.parseTypeDecl()
+    case "generic":
+        return p.parseGenericDeclaration()
+    case "<":
+        return p.parseGenericTopLevel()
+    default:
+        return p.parseControlOrDefaultStmt()
+    }
+}
+
+// parseControlOrDefaultStmt decide entre statement de controle ou padrão
+func (p *Parser) parseControlOrDefaultStmt() Stmt {
+    switch p.cur.Lexeme {
+    case "if", "while", "do", "for", "switch", "return", "break", "continue":
+        return p.parseControlStmt()
+    default:
+        return p.parseDefaultStmt()
+    }
+}
+
+// parseAndConsume executa função de parsing e consome ponto-e-vírgula opcional
+func (p *Parser) parseAndConsume(fn func() Stmt) Stmt {
+    stmt := fn()
+    if stmt != nil && p.cur.Lexeme == ";" {
+        p.advanceToken()
+    }
+    return stmt
+}
+
+// skipSemicolons consome pontos e vírgulas consecutivos
+func (p *Parser) skipSemicolons() {
+    for p.cur.Lexeme == ";" {
+        p.advanceToken()
+    }
+}
+
+// parseDefaultStmt lida com declarações de função e statements de expressão
+func (p *Parser) parseDefaultStmt() Stmt {
+    // Caso 1: Declaração de função (tipo seguido de "function")
+    if isTypeKeyword(p.cur.Lexeme) && p.nxt.Lexeme == "function" {
+        return p.parseFunctionDecl(false)
+    }
+
+    // Caso 2: Declaração de variável tipada
+    if p.seemsLikeTypeDeclaration() {
+        return p.parseAndConsume(p.parseTypedVarDecl)
+    }
+
+    // Caso 3: Statement de expressão
+    return p.parseAndConsume(p.parseExprStmt)
+}
+
+// seemsLikeTypeDeclaration verifica se parece com declaração de tipo
+func (p *Parser) seemsLikeTypeDeclaration() bool {
+    return isTypeKeyword(p.cur.Lexeme) ||
+        (p.cur.Type == lexer.IDENT && p.nxt.Type == lexer.IDENT) ||
+        (p.cur.Type == lexer.IDENT && p.nxt.Lexeme == "<") ||
+        (p.cur.Type == lexer.IDENT && p.nxt.Lexeme == "[")
+}
+
+// ============================
+// STATEMENTS DE EXPRESSÃO
+// ============================
+
+// parseExprStmt analisa um statement de expressão
+func (p *Parser) parseExprStmt() Stmt {
+    expr := p.parseExpression(LOWEST)
+    if expr == nil {
+        return nil
+    }
+    return &ExprStmt{Expr: expr}
+}
+
+// ============================
+// STATEMENTS DE CONTROLE
+// ============================
+
+// parseControlStmt roteia para parser específico de controle
+func (p *Parser) parseControlStmt() Stmt {
+    switch p.cur.Lexeme {
+    case "if":
+        return p.parseIf()
+    case "while":
+        return p.parseWhile()
+    case "do":
+        return p.parseDoWhile()
+    case "for":
+        return p.parseFor()
+    case "switch":
+        return p.parseSwitch()
+    case "return":
+        return p.parseReturn()
+    case "break":
+        return p.parseBreak()
+    case "continue":
+        return p.parseContinue()
+    default:
+        return nil
+    }
+}
+
+// ============================
+// CONDICIONAIS (IF/SWITCH)
+// ============================
+
+// parseIf analisa uma declaração if-else
+func (p *Parser) parseIf() Stmt {
+    p.advanceToken() // consome 'if'
+
+    cond := p.parseCondition()
+    if cond == nil {
+        return nil
+    }
+
+    thenBlock := p.parseBlockLike()
+    elseBlock := p.parseOptionalElse()
+
+    return &IfStmt{Cond: cond, Then: thenBlock, Else: elseBlock}
+}
+
+// parseOptionalElse analisa um bloco else opcional
+func (p *Parser) parseOptionalElse() []Stmt {
+    if p.cur.Lexeme != "else" {
+        return nil
+    }
+
+    p.advanceToken()
+    return p.parseBlockLike()
+}
+
+// ============================
+// SWITCH STATEMENT
+// ============================
+
+// parseSwitch analisa uma declaração switch
+func (p *Parser) parseSwitch() Stmt {
+    p.advanceToken() // consome 'switch'
+
+    cond := p.parseCondition()
+    if cond == nil {
+        return nil
+    }
+
+    if !p.expectAndConsume("{") {
+        p.errorf("expected '{' after switch condition")
+        return nil
+    }
+
+    cases := p.parseSwitchCases()
+    if cases == nil || !p.expectAndConsume("}") {
+        return nil
+    }
+
+    return &SwitchStmt{Expr: cond, Cases: cases}
+}
+
+// parseSwitchCases analisa todos os casos de um switch
+func (p *Parser) parseSwitchCases() []*CaseClause {
+    cases := make([]*CaseClause, 0, 3)
+
+    for !p.isAtSwitchEnd() {
+        clause := p.parseCaseClause()
+        if clause != nil {
+            cases = append(cases, clause)
+        }
+    }
+
+    return cases
+}
+
+// parseCaseClause analisa um único caso ou default
+func (p *Parser) parseCaseClause() *CaseClause {
+    var value Expr
+
+    switch p.cur.Lexeme {
+    case "case":
+        p.advanceToken()
+        value = p.parseExpression(LOWEST)
+        if value == nil {
+            p.errorf("expected expression after 'case'")
+            return nil
+        }
+    case "default":
+        p.advanceToken()
+        value = nil
+    default:
+        p.errorf("expected 'case' or 'default', got '%s'", p.cur.Lexeme)
+        return nil
+    }
+
+    if !p.expectAndConsume(":") {
+        return nil
+    }
+
+    return &CaseClause{
+        Value: value,
+        Body:  p.parseCaseBody(),
+    }
+}
+
+// parseCaseBody analisa o corpo de um caso
+func (p *Parser) parseCaseBody() []Stmt {
+    body := make([]Stmt, 0, 3)
+
+    for !p.isAtCaseEnd() {
+        stmt := p.parseTopLevel()
+        if stmt != nil {
+            body = append(body, stmt)
+        }
+    }
+
+    return body
+}
+
+// ============================
+// LOOPS (FOR/WHILE/DO-WHILE)
+// ============================
+
+// parseWhile analisa um loop while
+func (p *Parser) parseWhile() Stmt {
+    p.advanceToken() // consome 'while'
+
+    cond := p.parseCondition()
+    if cond == nil {
+        return nil
+    }
+
+    return &WhileStmt{Cond: cond, Body: p.parseBlockLike()}
+}
+
+// parseDoWhile analisa um loop do-while
+func (p *Parser) parseDoWhile() Stmt {
+    p.advanceToken() // consome 'do'
+
+    body := p.parseBlockLike()
+    if body == nil {
+        p.errorf("expected block after 'do'")
+        return nil
+    }
+
+    if !p.expectAndConsume("while") {
+        p.errorf("expected 'while' after do block")
+        return nil
+    }
+
+    cond := p.parseCondition()
+    if cond == nil {
+        return nil
+    }
+
+    return &DoWhileStmt{Body: body, Cond: cond}
+}
+
+// parseFor decide entre for tradicional e for-in
+func (p *Parser) parseFor() Stmt {
+    p.advanceToken() // consome 'for'
+
+    if p.isForInLoop() {
+        return p.parseForIn()
+    }
+    return p.parseForTraditional()
+}
+
+// parseForTraditional analisa um for loop tradicional
+func (p *Parser) parseForTraditional() Stmt {
+    if !p.expectAndConsume("(") {
+        return nil
+    }
+
+    init := p.parseForLoopInitializer()
+
+    if !p.expectAndConsume(";") {
+        p.syncTo(";")
+        return nil
+    }
+
+    cond := p.parseForLoopCondition()
+
+    if !p.expectAndConsume(";") {
+        p.syncTo(";")
+        return nil
+    }
+
+    post := p.parseForLoopPost()
+
+    if !p.expectAndConsume(")") {
+        p.syncTo(")")
+        return nil
+    }
+
+    return &ForStmt{
+        Init: init,
+        Cond: cond,
+        Post: post,
+        Body: p.parseBlockLike(),
+    }
+}
+
+// parseForLoopInitializer analisa inicializador do for loop
+func (p *Parser) parseForLoopInitializer() Stmt {
+    if p.cur.Lexeme == ";" {
+        return nil
+    }
+
+    if p.cur.Lexeme == "var" {
+        return p.parseVarDecl()
+    }
+
+    savedCur, savedNxt := p.cur, p.nxt
+    decl := p.parseTypedVarDecl()
+    if decl != nil {
+        return decl
+    }
+
+    p.cur, p.nxt = savedCur, savedNxt
+    return p.parseExprStmt()
+}
+
+// parseForLoopCondition analisa condição do for loop
+func (p *Parser) parseForLoopCondition() Expr {
+    if p.cur.Lexeme == ";" {
+        return nil
+    }
+    return p.parseExpression(LOWEST)
+}
+
+// parseForLoopPost analisa expressão de pós-iteração
+func (p *Parser) parseForLoopPost() Stmt {
+    if p.cur.Lexeme == ")" {
+        return nil
+    }
+
+    expr := p.parseExpression(LOWEST)
+    if expr != nil {
+        return &ExprStmt{Expr: expr}
+    }
+    return nil
+}
+
+// parseForIn analisa um for-in loop
+func (p *Parser) parseForIn() Stmt {
+    if !p.expectAndConsume("(") {
+        return nil
+    }
+
+    if p.cur.Type != lexer.IDENT {
+        p.errorf("expected identifier in for-in loop")
+        return nil
+    }
+
+    index, item := p.parseForInIdentifiers()
+
+    if !p.expectAndConsume("in") {
+        return nil
+    }
+
+    iterable := p.parseExpression(LOWEST)
+    if iterable == nil || !p.expectAndConsume(")") {
+        return nil
+    }
+
+    return &ForInStmt{
+        Index:    index,
+        Item:     item,
+        Iterable: iterable,
+        Body:     p.parseBlockLike(),
+    }
+}
+
+// parseForInIdentifiers parseia identificadores do for-in
+func (p *Parser) parseForInIdentifiers() (*Identifier, *Identifier) {
+    firstIdent := &Identifier{Name: p.cur.Lexeme}
+    p.advanceToken()
+
+    if p.cur.Lexeme == "," {
+        p.advanceToken()
+
+        if p.cur.Type != lexer.IDENT {
+            p.errorf("expected second identifier in for-in loop")
+            return nil, nil
+        }
+
+        secondIdent := &Identifier{Name: p.cur.Lexeme}
+        p.advanceToken()
+        return firstIdent, secondIdent
+    }
+
+    return nil, firstIdent
+}
+
+// isForInLoop verifica se é um for-in loop
+func (p *Parser) isForInLoop() bool {
+    return p.cur.Lexeme == "(" &&
+        p.nxt.Type == lexer.IDENT &&
+        !isTypeKeyword(p.nxt.Lexeme) &&
+        p.nxt.Lexeme != "var"
+}
+
+// ============================
+// STATEMENTS DE FLUXO
+// ============================
+
+// parseReturn analisa um statement de retorno
+func (p *Parser) parseReturn() Stmt {
+    p.advanceToken() // consome 'return'
+
+    if p.isAtEndOfStatement() {
+        p.consumeOptionalSemicolon()
+        return &ReturnStmt{Value: nil}
+    }
+
+    value := p.parseExpression(LOWEST)
+    p.consumeOptionalSemicolon()
+
+    return &ReturnStmt{Value: value}
+}
+
+// parseBreak analisa um statement break
+func (p *Parser) parseBreak() Stmt {
+    p.advanceToken()
+    p.consumeOptionalSemicolon()
+    return &BreakStmt{}
+}
+
+// parseContinue analisa um statement continue
+func (p *Parser) parseContinue() Stmt {
+    p.advanceToken()
+    p.consumeOptionalSemicolon()
+    return &ContinueStmt{}
+}
+
+// isAtEndOfStatement verifica fim de statement
+func (p *Parser) isAtEndOfStatement() bool {
+    return p.cur.Lexeme == ";" || p.cur.Lexeme == "}" || p.cur.Type == lexer.EOF
+}
+
+// ============================
+// FUNÇÕES AUXILIARES
+// ============================
+
+// parseCondition analisa uma condição entre parênteses
+func (p *Parser) parseCondition() Expr {
+    if !p.expectAndConsume("(") {
+        p.errorf("expected '(' after %s", p.cur.Lexeme)
+        return nil
+    }
+
+    cond := p.parseExpression(LOWEST)
+    if cond == nil {
+        p.errorf("expected condition expression")
+        p.syncToNextStmt()
+        return nil
+    }
+
+    if !p.expectAndConsume(")") {
+        p.errorf("expected ')' after condition")
+        return nil
+    }
+
+    return cond
+}
+
+// parseBlockLike analisa um bloco ou statement único
+func (p *Parser) parseBlockLike() []Stmt {
+    if p.cur.Lexeme == "{" {
+        return p.parseBlock()
+    }
+
+    if stmt := p.parseTopLevel(); stmt != nil {
+        return []Stmt{stmt}
+    }
+
+    return nil
+}
+
+// parseBlock analisa um bloco de statements
+func (p *Parser) parseBlock() []Stmt {
+    if !p.expectAndConsume("{") {
+        return nil
+    }
+
+    stmts := make([]Stmt, 0, 5)
+    for !p.isBlockEnd() {
+        stmt := p.parseTopLevel()
+        if stmt != nil {
+            stmts = append(stmts, stmt)
+        }
+    }
+
+    if !p.expectAndConsume("}") {
+        return nil
+    }
+    return stmts
+}
+
+// ============================
+// FUNÇÕES DE VERIFICAÇÃO
+// ============================
+
+// isAtSwitchEnd verifica se chegou ao fim do switch
+func (p *Parser) isAtSwitchEnd() bool {
+    return p.cur.Lexeme == "}" || p.cur.Type == lexer.EOF
+}
+
+// isAtCaseEnd verifica se chegou ao fim de um caso
+func (p *Parser) isAtCaseEnd() bool {
+    return p.cur.Lexeme == "case" ||
+        p.cur.Lexeme == "default" ||
+        p.cur.Lexeme == "}" ||
+        p.cur.Type == lexer.EOF
+}
+
+// isBlockEnd verifica se chegou ao fim de um bloco
+func (p *Parser) isBlockEnd() bool {
+    return p.cur.Lexeme == "}" || p.cur.Type == lexer.EOF
+}
+
+// ============================
+// DECLARAÇÕES DE VARIÁVEIS E CONSTANTES
+// ============================
+
+// parseTypedVarDecl processa declarações de variáveis com tipo explícito (usado internamente)
+func (p *Parser) parseTypedVarDecl() Stmt {
+    typ := p.parseType()
+    if typ == nil || p.cur.Type != lexer.IDENT {
+        return nil
+    }
+
+    name := p.cur.Lexeme
+    p.advanceToken()
+
+    var init Expr
+    if p.cur.Lexeme == "=" {
+        p.advanceToken()
+        init = p.parseExpression(LOWEST)
+        if init == nil {
+            p.errorf("expected expression after '='")
+            return nil
+        }
+    }
+
+    return &VarDecl{Name: name, Type: typ, Init: init}
+}
+
+// parseVarDecl processa declarações 'var'
+func (p *Parser) parseVarDecl() Stmt {
+    p.advanceToken() // consome 'var'
+
+    if p.cur.Type != lexer.IDENT {
+        p.errorf("expected identifier after 'var'")
+        p.syncTo(";")
+        return nil
+    }
+
+    name := p.cur.Lexeme
+    p.advanceToken()
+
+    var typ Type
+    if p.cur.Lexeme == ":" {
+        p.advanceToken()
+        typ = p.parseType()
+        if typ == nil {
+            p.syncTo(";")
+            return nil
+        }
+    }
+
+    init := p.parseOptionalInitializer()
+    return &VarDecl{Name: name, Type: typ, Init: init}
+}
+
+// parseConstDecl processa declarações 'const'
+func (p *Parser) parseConstDecl() Stmt {
+    p.advanceToken() // consome 'const'
+
+    if p.cur.Type != lexer.IDENT {
+        p.errorf("expected identifier after 'const'")
+        p.syncTo(";")
+        return nil
+    }
+
+    name := p.cur.Lexeme
+    p.advanceToken()
+
+    if p.cur.Lexeme != "=" {
+        p.errorf("expected '=' in const declaration")
+        p.syncTo(";")
+        return nil
+    }
+
+    p.advanceToken()
+    init := p.parseExpression(LOWEST)
+    if init == nil {
+        p.errorf("expected expression for constant value")
+        p.syncTo(";")
+        return nil
+    }
+
+    return &ConstDecl{Name: name, Init: init}
+}
+
+// parseOptionalInitializer processa inicializador opcional após '='
+func (p *Parser) parseOptionalInitializer() Expr {
+    if p.cur.Lexeme != "=" {
+        return nil
+    }
+    p.advanceToken()
+
+    // Otimização: verifica literais comuns antes de parseExpression completo
+    switch p.cur.Lexeme {
+    case "{":
+        return p.parseCollectionLiteral()
+    case "[":
+        return p.parseArrayLiteral()
+    case "&":
+        return p.parseReferenceExpr()
+    default:
+        return p.parseExpression(LOWEST)
+    }
+}
+
+// ============================
+// FUNÇÕES
+// ============================
+
+// parseFunctionDecl processa declarações de funções (genéricas ou não)
+func (p *Parser) parseFunctionDecl(generic bool) Stmt {
+    var generics []*GenericParam
+    if generic {
+        generics = p.parseGenericParamsList()
+        if generics == nil {
+            return nil
+        }
+    }
+
+    returnType := p.parseType()
+    if returnType == nil {
+        return nil
+    }
+
+    if !p.expectAndConsume("function") {
+        return nil
+    }
+
+    if p.cur.Type != lexer.IDENT {
+        p.errorf("expected function name")
+        return nil
+    }
+
+    name := p.cur.Lexeme
+    p.advanceToken()
+
+    params := p.parseFunctionParameters()
+    if params == nil {
+        return nil
+    }
+
+    body := p.parseFunctionBody()
+    if body == nil {
+        return nil
+    }
+
+    return &FunctionDecl{
+        Name:       name,
+        Generics:   generics,
+        Params:     params,
+        ReturnType: returnType,
+        Body:       body,
+    }
+}
+
+// parseFunctionParameters processa lista de parâmetros de função
+func (p *Parser) parseFunctionParameters() []*Param {
+    if !p.expectAndConsume("(") {
+        return nil
+    }
+
+    if p.cur.Lexeme == ")" {
+        p.advanceToken()
+        return []*Param{}
+    }
+
+    params := make([]*Param, 0, 4)
+
+    for {
+        typ := p.parseType()
+        if typ == nil {
+            p.errorf("expected parameter type")
+            return nil
+        }
+
+        if p.cur.Type != lexer.IDENT {
+            p.errorf("expected parameter name")
+            return nil
+        }
+
+        params = append(params, &Param{Name: p.cur.Lexeme, Type: typ})
+        p.advanceToken()
+
+        if p.cur.Lexeme == ")" {
+            p.advanceToken()
+            break
+        }
+
+        if !p.expectAndConsume(",") {
+            return nil
+        }
+    }
+
+    return params
+}
+
+// parseFunctionBody processa corpo de função/método
+func (p *Parser) parseFunctionBody() []Stmt {
+    if p.cur.Lexeme != "{" {
+        p.errorf("expected '{' to start function/method body")
+        return nil
+    }
+
+    body := p.parseBlock()
+    if body == nil {
+        return nil
+    }
+
+    return body
+}
+
+// ============================
+// STRUCTS (DADOS)
+// ============================
+
+// parseStructDecl processa declarações de struct (com ou sem generics)
+func (p *Parser) parseStructDecl(generics []*GenericParam) Stmt {
+    if generics == nil {
+        generics = p.parseGenericParamsWithPrefix()
+    }
+
+    if !p.expectAndConsume("struct") {
+        return nil
+    }
+
+    if p.cur.Type != lexer.IDENT {
+        p.errorf("expected struct name")
+        p.syncTo("}")
+        return nil
+    }
+
+    name := p.cur.Lexeme
+    p.advanceToken()
+
+    // Suporte para generics após o nome (sintaxe alternativa)
+    if generics == nil && p.cur.Lexeme == "<" {
+        generics = p.parseGenericParamsList()
+    }
+
+    if !p.expectAndConsume("{") {
+        return nil
+    }
+
+    fields := p.parseStructFields()
+
+    if !p.expectAndConsume("}") {
+        return nil
+    }
+
+    return &StructDecl{
+        Name:     name,
+        Generics: generics,
+        Fields:   fields,
+    }
+}
+
+// parseStructFields processa campos de struct
+func (p *Parser) parseStructFields() []*FieldDecl {
+    fields := make([]*FieldDecl, 0, 4)
+
+    for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
+        if p.cur.Lexeme == ";" {
+            p.advanceToken()
+            continue
+        }
+
+        isPrivate := false
+        switch p.cur.Lexeme {
+        case "private":
+            isPrivate = true
+            p.advanceToken()
+        case "public":
+            p.advanceToken()
+        }
+
+        typ := p.parseType()
+        if typ == nil {
+            if isPrivate {
+                p.errorf("expected type after 'private'")
+            } else {
+                p.errorf("expected field type in struct, got '%s'", p.cur.Lexeme)
+            }
+            p.syncStructField()
+            continue
+        }
+
+        if p.cur.Type != lexer.IDENT {
+            p.errorf("expected field name after type, got '%s'", p.cur.Lexeme)
+            p.syncStructField()
+            continue
+        }
+
+        fieldName := p.cur.Lexeme
+        p.advanceToken()
+
+        p.consumeOptionalSemicolon()
+
+        fields = append(fields, &FieldDecl{
+            Name:      fieldName,
+            Type:      typ,
+            IsPrivate: isPrivate,
+        })
+    }
+
+    return fields
+}
+
+// syncStructField sincroniza após erro em campo de struct
+func (p *Parser) syncStructField() {
+    for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
+        if p.cur.Lexeme == ";" {
+            p.advanceToken()
+            return
+        }
+        if p.cur.Lexeme == "private" || p.cur.Lexeme == "public" || isTypeKeyword(p.cur.Lexeme) || p.cur.Type == lexer.IDENT {
+            return
+        }
+        p.advanceToken()
+    }
+}
+
+// ============================
+// IMPLEMENTAÇÕES (COMPORTAMENTO)
+// ============================
+
+// parseImplementDecl processa blocos 'implement'
+func (p *Parser) parseImplementDecl() Stmt {
+    p.advanceToken() // consome 'implement'
+
+    if p.cur.Type != lexer.IDENT {
+        p.errorf("expected struct name to implement")
+        return nil
+    }
+
+    targetName := p.cur.Lexeme
+    p.advanceToken()
+
+    if !p.expectAndConsume("{") {
+        return nil
+    }
+
+    init, methods := p.parseImplementBody()
+
+    if !p.expectAndConsume("}") {
+        return nil
+    }
+
+    return &ImplDecl{
+        TargetName: targetName,
+        Init:       init,
+        Methods:    methods,
+    }
+}
+
+// parseImplementBody processa corpo de implementação (init + métodos)
+func (p *Parser) parseImplementBody() (*InitDecl, []*MethodDecl) {
+    var initDecl *InitDecl
+    methods := make([]*MethodDecl, 0, 4)
+
+    for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
+        if p.cur.Lexeme == ";" {
+            p.advanceToken()
+            continue
+        }
+
+        if p.cur.Lexeme == "init" {
+            if initDecl != nil {
+                p.errorf("multiple init blocks defined")
+            }
+            initDecl = p.parseInitDecl()
+            continue
+        }
+
+        method := p.parseMethodDecl()
+        if method != nil {
+            methods = append(methods, method)
+        }
+    }
+
+    return initDecl, methods
+}
+
+// parseMethodDecl processa declaração de método individual
+func (p *Parser) parseMethodDecl() *MethodDecl {
+    var generics []*GenericParam
+    if p.cur.Lexeme == "generic" && p.nxt.Lexeme == "<" {
+        generics = p.parseGenericParamsWithPrefix()
+    }
+
+    returnType := p.parseType()
+    if returnType == nil {
+        p.errorf("expected return type for method")
+        p.syncImplMember()
+        return nil
+    }
+
+    if p.cur.Type != lexer.IDENT {
+        p.errorf("expected method name")
+        p.syncImplMember()
+        return nil
+    }
+
+    name := p.cur.Lexeme
+    p.advanceToken()
+
+    params := p.parseFunctionParameters()
+    body := p.parseFunctionBody()
+
+    return &MethodDecl{
+        Name:       name,
+        Generics:   generics,
+        Params:     params,
+        ReturnType: returnType,
+        Body:       body,
+    }
+}
+
+// parseInitDecl processa declaração de inicializador (init)
+func (p *Parser) parseInitDecl() *InitDecl {
+    p.advanceToken() // consome 'init'
+    params := p.parseFunctionParameters()
+    body := p.parseFunctionBody()
+    return &InitDecl{Params: params, Body: body}
+}
+
+// syncImplMember sincroniza após erro em membro de implementação
+func (p *Parser) syncImplMember() {
+    p.advanceToken()
+    for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
+        if p.cur.Lexeme == ";" {
+            p.advanceToken()
+            return
+        }
+        if p.cur.Lexeme == "init" || p.cur.Lexeme == "generic" {
+            return
+        }
+        if isTypeKeyword(p.cur.Lexeme) {
+            return
+        }
+        p.advanceToken()
+    }
+}
+
+// ============================
+// GENERICS TOP-LEVEL
+// ============================
+
+// parseGenericDeclaration processa 'generic<T> ...'
+func (p *Parser) parseGenericDeclaration() Stmt {
+    generics := p.parseGenericParamsWithPrefix()
+    if generics == nil {
+        return nil
+    }
+
+    switch p.cur.Lexeme {
+    case "struct":
+        return p.parseStructDecl(generics)
+    default:
+        returnType := p.parseType()
+        if returnType == nil {
+            p.errorf("expected struct or return type after generics")
+            return nil
+        }
+
+        if !p.expectAndConsume("function") {
+            p.errorf("expected 'function' keyword")
+            return nil
+        }
+
+        if p.cur.Type != lexer.IDENT {
+            p.errorf("expected function name")
+            return nil
+        }
+
+        name := p.cur.Lexeme
+        p.advanceToken()
+
+        params := p.parseFunctionParameters()
+        body := p.parseFunctionBody()
+
+        return &FunctionDecl{
+            Name:       name,
+            Generics:   generics,
+            Params:     params,
+            ReturnType: returnType,
+            Body:       body,
+        }
+    }
+}
+
+// parseGenericTopLevel processa atalho '<T> ...'
+func (p *Parser) parseGenericTopLevel() Stmt {
+    generics := p.parseGenericParamsList()
+    if generics == nil {
+        return nil
+    }
+
+    switch p.cur.Lexeme {
+    case "struct":
+        return p.parseStructDecl(generics)
+    default:
+        returnType := p.parseType()
+        if returnType == nil {
+            return nil
+        }
+        if !p.expectAndConsume("function") {
+            return nil
+        }
+        if p.cur.Type != lexer.IDENT {
+            return nil
+        }
+        name := p.cur.Lexeme
+        p.advanceToken()
+        params := p.parseFunctionParameters()
+        body := p.parseFunctionBody()
+        return &FunctionDecl{
+            Name:       name,
+            Generics:   generics,
+            Params:     params,
+            ReturnType: returnType,
+            Body:       body,
+        }
+    }
+}
+
+// ============================
+// DECLARAÇÕES DE TIPOS
+// ============================
+
+// parseTypeDecl processa declarações 'type' (genéricas ou não)
+func (p *Parser) parseTypeDecl() Stmt {
+    var generics []*GenericParam
+    var hasGenericPrefix bool
+
+    if p.cur.Lexeme == "generic" && p.nxt.Lexeme == "<" {
+        generics = p.parseGenericParamsWithPrefix()
+        hasGenericPrefix = true
+    }
+
+    if !hasGenericPrefix {
+        p.advanceToken() // consome 'type'
+    } else if !p.expectAndConsume("type") {
+        return nil
+    }
+
+    if p.cur.Type != lexer.IDENT {
+        p.errorf("expected type name")
+        return nil
+    }
+
+    name := p.cur.Lexeme
+    p.advanceToken()
+
+    if !hasGenericPrefix && p.cur.Lexeme == "<" {
+        generics = p.parseGenericParamsList()
+    }
+
+    typ := p.parseTypeBody()
+
+    return &TypeDecl{Name: name, Generics: generics, Type: typ}
+}
+
+// parseTypeBody processa corpo de declaração de tipo
+func (p *Parser) parseTypeBody() Type {
+    if p.cur.Lexeme == "{" {
+        // Struct anônimo legacy
+        p.advanceToken()
+        fields := p.parseStructFields()
+        if !p.expectAndConsume("}") {
+            return nil
+        }
+        return &StructType{Fields: fields}
+    }
+    return p.parseType()
+}
+
+// ============================
+// PARSING DE EXPRESSÕES (PRINCIPAL)
+// ============================
+
+// parseExpression implementa o algoritmo de precedência de operadores (Pratt parsing)
+func (p *Parser) parseExpression(precedence int) Expr {
+    left := p.parsePrimary()
+    if left == nil {
+        return nil
+    }
+
+    for {
+        curOp := p.cur.Lexeme
+
+        // Isso permite que o parseTernary recupere o controle ao ver o delimitador
+        if curOp == ";" || curOp == ")" || curOp == "}" || curOp == "]" || curOp == "," || curOp == ":" || p.cur.Type == lexer.EOF {
+            return left
+        }
+
+        // Caso especial para operador ternário
+        if curOp == "?" {
+            // Se a precedência atual for maior ou igual ao Ternário,
+            // paramos aqui para que a instância superior do parser lide com ele.
+            if precedence >= TERNARY {
+                return left
+            }
+            left = p.parseTernary(left)
+            if left == nil {
+                return nil
+            }
+            continue
+        }
+
+        // Verifica se é um operador válido para continuar
+        if !p.isValidContinuationOperator() {
+            return left
+        }
+
+        curPrec := p.precedenceOf(curOp)
+
+        // Verifica precedência
+        if curPrec < precedence {
+            return left
+        }
+
+        // Processa o operador atual
+        left = p.processOperator(left, curOp, curPrec)
+        if left == nil {
+            return nil
+        }
+    }
+}
+
+// isValidContinuationOperator verifica se o token atual permite continuar a expressão
+func (p *Parser) isValidContinuationOperator() bool {
+    curOp := p.cur.Lexeme
+    return p.isInfixOperator(p.cur) || p.isPostfixOperator(p.cur) ||
+        curOp == "(" || curOp == "[" || curOp == "."
+}
+
+// processOperator processa o operador atual baseado em seu tipo
+func (p *Parser) processOperator(left Expr, curOp string, curPrec int) Expr {
+    switch {
+    case curOp == "(":
+        return p.parseCall(left)
+    case curOp == "[":
+        return p.parseIndex(left)
+    case curOp == ".":
+        return p.parseMemberAccess(left)
+    case p.isInfixOperator(p.cur):
+        return p.parseInfix(left, curPrec)
+    case p.isPostfixOperator(p.cur):
+        return p.parsePostfix(left)
+    default:
+        return left
+    }
+}
+
+// ============================
+// PARSING DE EXPRESSÕES PRIMÁRIAS
+// ============================
+
+// parsePrimary processa expressões primárias (literais, identificadores, etc.)
+func (p *Parser) parsePrimary() Expr {
+    switch p.cur.Type {
+    case lexer.IDENT:
+        return p.parseIdentifierExpr()
+    case lexer.INT:
+        return p.parseIntLiteral()
+    case lexer.FLOAT:
+        return p.parseFloatLiteral()
+    case lexer.STRING:
+        return p.parseStringLiteral()
+    case lexer.KEYWORD:
+        return p.parseKeywordExpr()
+    case lexer.OP:
+        return p.parseOperatorExpr()
+    default:
+        p.advanceToken()
+        return nil
+    }
+}
+
+// parseIdentifierExpr processa identificadores com casos especiais
+func (p *Parser) parseIdentifierExpr() Expr {
+    // Tratamento especial para coleções explícitas (set, map)
+    if (p.cur.Lexeme == "set" || p.cur.Lexeme == "map") && (p.nxt.Lexeme == "<" || p.nxt.Lexeme == "{") {
+        return p.parseExplicitCollectionLiteral()
+    }
+
+    // Struct literal tipado (ex: Point { ... })
+    if p.nxt.Lexeme == "{" {
+        return p.parseTypedStructLiteral()
+    }
+
+    return p.parseIdentifier()
+}
+
+// parseIdentifier cria um nó de identificador
+func (p *Parser) parseIdentifier() Expr {
+    ident := &Identifier{Name: p.cur.Lexeme}
+    p.advanceToken()
+    return ident
+}
+
+// parseIntLiteral processa literais inteiros
+func (p *Parser) parseIntLiteral() Expr {
+    value, err := strconv.ParseInt(p.cur.Lexeme, 10, 64)
+    if err != nil {
+        p.errorf("invalid integer literal: %s", p.cur.Lexeme)
+        return nil
+    }
+
+    p.advanceToken()
+    return &IntLiteral{Value: value}
+}
+
+// parseFloatLiteral processa literais de ponto flutuante
+func (p *Parser) parseFloatLiteral() Expr {
+    value, err := strconv.ParseFloat(p.cur.Lexeme, 64)
+    if err != nil {
+        p.errorf("invalid float literal: %s", p.cur.Lexeme)
+        return nil
+    }
+
+    p.advanceToken()
+    return &FloatLiteral{Value: value}
+}
+
+// parseStringLiteral processa literais de string
+func (p *Parser) parseStringLiteral() Expr {
+    str := &StringLiteral{Value: p.cur.Value}
+    p.advanceToken()
+    return str
+}
+
+// parseKeywordExpr processa expressões iniciadas por keywords
+func (p *Parser) parseKeywordExpr() Expr {
+    switch p.cur.Lexeme {
+    case "true", "false":
+        return p.parseBoolLiteral()
+    case "null":
+        p.advanceToken()
+        return &NullLiteral{}
+    case "self":
+        p.advanceToken()
+        return &SelfExpr{}
+    case "lenght", "append", "remove", "removeIndex":
+        // Trata built-ins como identificadores especiais
+        return p.parseBuiltinCall()
+    default:
+        if isTypeKeyword(p.cur.Lexeme) {
+            return nil
+        }
+        p.errorf("unexpected keyword: %s", p.cur.Lexeme)
+        return nil
+    }
+}
+
+// parseBuiltinCall processa chamadas de funções built-in (len, append, delete)
+func (p *Parser) parseBuiltinCall() Expr {
+    // Salva o nome da built-in
+    builtinName := p.cur.Lexeme
+    p.advanceToken() // consome o nome da built-in
+
+    // Verifica se é uma chamada de função
+    if p.cur.Lexeme != "(" {
+        // Se não tem parênteses, retorna como identificador
+        return &Identifier{Name: builtinName}
+    }
+
+    // Parseia os argumentos
+    if !p.expectAndConsume("(") {
+        return nil
+    }
+
+    args := p.parseArgumentList()
+    if !p.expectAndConsume(")") {
+        return nil
+    }
+
+    // Cria um CallExpr especial (ou poderia ser um BuiltinCallExpr se quiser diferenciar)
+    return &CallExpr{
+        Callee: &Identifier{Name: builtinName},
+        Args:   args,
+    }
+}
+
+// parseBoolLiteral processa literais booleanos
+func (p *Parser) parseBoolLiteral() Expr {
+    val := p.cur.Lexeme == "true"
+    p.advanceToken()
+    return &BoolLiteral{Value: val}
+}
+
+// parseOperatorExpr processa expressões iniciadas por operadores
+func (p *Parser) parseOperatorExpr() Expr {
+    switch p.cur.Lexeme {
+    case "(":
+        return p.parseParenthesizedExpr()
+    case "&":
+        return p.parseReferenceExpr()
+    case "{":
+        return p.parseBraceLiteral()
+    case "[":
+        return p.parseArrayLiteral()
+    case ":":
+        return nil
+    default:
+        if p.isPrefixOperator(p.cur) {
+            return p.parsePrefixExpr()
+        }
+        p.errorf("unexpected operator: %s", p.cur.Lexeme)
+        return nil
+    }
+}
+
+// ============================
+// PARSING DE OPERADORES
+// ============================
+
+// parsePrefixExpr processa operadores prefixos
+func (p *Parser) parsePrefixExpr() Expr {
+    op := p.cur.Lexeme
+    p.advanceToken()
+
+    expr := p.parseExpression(PREFIX)
+    if expr == nil {
+        return nil
+    }
+
+    return &UnaryExpr{Op: op, Expr: expr, Postfix: false}
+}
+
+// parseInfix processa operadores infixos
+func (p *Parser) parseInfix(left Expr, precedence int) Expr {
+    op := p.cur.Lexeme
+    p.advanceToken()
+
+    right := p.parseExpression(precedence)
+    if right == nil {
+        return nil
+    }
+
+    if op == "=" {
+        return &AssignExpr{Left: left, Right: right}
+    }
+
+    return &BinaryExpr{Left: left, Op: op, Right: right}
+}
+
+// parsePostfix processa operadores pós-fixos
+func (p *Parser) parsePostfix(left Expr) Expr {
+    op := p.cur.Lexeme
+    p.advanceToken()
+    return &UnaryExpr{Op: op, Expr: left, Postfix: true}
+}
+
+// parseTernary processa operador ternário (cond ? true : false)
+func (p *Parser) parseTernary(cond Expr) Expr {
+    p.advanceToken() // consume '?'
+
+    // Parse a expressão verdadeira
+    trueExpr := p.parseExpression(LOWEST)
+    if trueExpr == nil {
+        p.errorf("expected expression after '?'")
+        return nil
+    }
+
+    // CORREÇÃO: Verificar explicitamente se temos ':' antes de tentar consumir
+    if p.cur.Lexeme != ":" {
+        p.errorf("expected ':' in ternary expression, got '%s'", p.cur.Lexeme)
+        return nil
+    }
+
+    // Deve ter ':' após a expressão verdadeira
+    if !p.expectAndConsume(":") {
+        return nil
+    }
+
+    // Parse a expressão falsa com precedência TERNARY
+    falseExpr := p.parseExpression(TERNARY)
+    if falseExpr == nil {
+        p.errorf("expected expression after ':' in ternary")
+        return nil
+    }
+
+    return &TernaryExpr{
+        Cond:      cond,
+        TrueExpr:  trueExpr,
+        FalseExpr: falseExpr,
+    }
+}
+
+// ============================
+// PARSING DE CHAMADAS E ACESSOS
+// ============================
+
+// parseCall processa chamadas de função
+func (p *Parser) parseCall(left Expr) Expr {
+    // Trata GenericCallExpr sem argumentos
+    if gce, ok := left.(*GenericCallExpr); ok && gce.Args == nil {
+        return p.parseGenericFunctionCall(gce)
+    }
+
+    // Chamada normal
+    if !p.expectAndConsume("(") {
+        return left
+    }
+
+    args := p.parseArgumentList()
+    if !p.expectAndConsume(")") {
+        return nil
+    }
+
+    return &CallExpr{
+        Callee: left,
+        Args:   args,
+    }
+}
+
+// parseGenericFunctionCall processa chamada de função genérica
+func (p *Parser) parseGenericFunctionCall(gce *GenericCallExpr) *GenericCallExpr {
+    if !p.expectAndConsume("(") {
+        return nil
+    }
+
+    var args []Expr
+    if p.cur.Lexeme != ")" {
+        args = p.parseArgumentList()
+    }
+
+    if !p.expectAndConsume(")") {
+        return nil
+    }
+
+    return &GenericCallExpr{
+        Callee:   gce.Callee,
+        TypeArgs: gce.TypeArgs,
+        Args:     args,
+    }
+}
+
+// parseArgumentList processa lista de argumentos
+func (p *Parser) parseArgumentList() []Expr {
+    // VERIFICAÇÃO ADICIONADA: lista de argumentos vazia
+    if p.cur.Lexeme == ")" {
+        return []Expr{} // Retorna lista vazia
+    }
+
+    args := make([]Expr, 0, 3)
+
+    for {
+        arg := p.parseExpression(LOWEST)
+        if arg == nil {
+            return nil
+        }
+        args = append(args, arg)
+
+        if !p.match(",") {
+            break
+        }
+    }
+
+    return args
+}
+
+// match verifica e consome um token se corresponder
+func (p *Parser) match(lexeme string) bool {
+    if p.cur.Lexeme == lexeme {
+        p.advanceToken()
+        return true
+    }
+    return false
+}
+
+// parseIndex processa acesso por índice (array[expr])
+func (p *Parser) parseIndex(left Expr) Expr {
+    p.advanceToken()
+
+    index := p.parseExpression(LOWEST)
+    if index == nil {
+        return nil
+    }
+
+    if !p.expectAndConsume("]") {
+        return nil
+    }
+
+    return &IndexExpr{Array: left, Index: index}
+}
+
+// parseMemberAccess processa acesso a membro (object.member)
+func (p *Parser) parseMemberAccess(left Expr) Expr {
+    p.advanceToken() // consume '.'
+
+    if p.cur.Type != lexer.IDENT {
+        p.errorf("expected member name after '.'")
+        return nil
+    }
+
+    member := p.cur.Lexeme
+    p.advanceToken()
+
+    return &MemberExpr{Object: left, Member: member}
+}
+
+// ============================
+// PARSING DE LITERAIS
+// ============================
+
+// parseBraceLiteral processa literais com chaves { ... }
+func (p *Parser) parseBraceLiteral() Expr {
+    p.advanceToken() // consume '{'
+
+    // Caso vazio
+    if p.cur.Lexeme == "}" {
+        p.advanceToken()
+        return &SetLiteral{Elements: []Expr{}}
+    }
+
+    // Parse primeiro elemento para determinar tipo
+    firstExpr := p.parseExpression(LOWEST)
+    if firstExpr == nil {
+        return nil
+    }
+
+    // Se tiver ':', é Map ou Struct
+    if p.cur.Lexeme == ":" {
+        p.advanceToken()
+        firstValue := p.parseExpression(LOWEST)
+        if firstValue == nil {
+            return nil
+        }
+
+        // Struct se a chave for identificador simples
+        if ident, ok := firstExpr.(*Identifier); ok {
+            return p.continueStructLiteral(ident, firstValue)
+        }
+        return p.continueMapLiteral(firstExpr, firstValue)
+    }
+
+    // Caso contrário, é Set
+    return p.continueSetLiteral(firstExpr)
+}
+
+// parseTypedStructLiteral processa struct literais tipados (ex: Point { ... })
+func (p *Parser) parseTypedStructLiteral() Expr {
+    p.advanceToken() // consome o nome do tipo
+    return p.parseBraceLiteral()
+}
+
+// continueStructLiteral continua parsing de struct literal
+func (p *Parser) continueStructLiteral(firstKey *Identifier, firstValue Expr) Expr {
+    fields := []*StructField{{Name: firstKey.Name, Value: firstValue}}
+
+    for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
+        if p.cur.Lexeme == "," {
+            p.advanceToken()
+            if p.cur.Lexeme == "}" {
+                break
+            }
+        }
+
+        if p.cur.Type != lexer.IDENT {
+            p.errorf("expected field name in struct literal, got %s", p.cur.Lexeme)
+            return nil
+        }
+
+        fieldName := p.cur.Lexeme
+        p.advanceToken()
+
+        if !p.expectAndConsume(":") {
+            return nil
+        }
+
+        val := p.parseExpression(LOWEST)
+        if val == nil {
+            return nil
+        }
+
+        fields = append(fields, &StructField{Name: fieldName, Value: val})
+    }
+
+    if !p.expectAndConsume("}") {
+        return nil
+    }
+    return &StructLiteral{Fields: fields}
+}
+
+// continueMapLiteral continua parsing de map literal
+func (p *Parser) continueMapLiteral(firstKey, firstValue Expr) Expr {
+    entries := []*MapEntry{{Key: firstKey, Value: firstValue}}
+
+    for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
+        if p.cur.Lexeme == "," {
+            p.advanceToken()
+            if p.cur.Lexeme == "}" {
+                break
+            }
+        }
+
+        key := p.parseExpression(LOWEST)
+        if key == nil {
+            return nil
+        }
+
+        if !p.expectAndConsume(":") {
+            return nil
+        }
+
+        val := p.parseExpression(LOWEST)
+        if val == nil {
+            return nil
+        }
+
+        entries = append(entries, &MapEntry{Key: key, Value: val})
+    }
+
+    if !p.expectAndConsume("}") {
+        return nil
+    }
+    return &MapLiteral{Entries: entries}
+}
+
+// continueSetLiteral continua parsing de set literal
+func (p *Parser) continueSetLiteral(firstElem Expr) Expr {
+    elements := []Expr{firstElem}
+
+    for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
+        if p.cur.Lexeme == "," {
+            p.advanceToken()
+            if p.cur.Lexeme == "}" {
+                break
+            }
+        }
+
+        elem := p.parseExpression(LOWEST)
+        if elem == nil {
+            return nil
+        }
+        elements = append(elements, elem)
+    }
+
+    if !p.expectAndConsume("}") {
+        return nil
+    }
+    return &SetLiteral{Elements: elements}
+}
+
+// parseExplicitCollectionLiteral processa literais explícitos de coleção (set/map)
+func (p *Parser) parseExplicitCollectionLiteral() Expr {
+    typeName := p.cur.Lexeme
+    p.advanceToken() // consome 'map' ou 'set'
+
+    // Consome parâmetros genéricos se existirem
+    if p.cur.Lexeme == "<" {
+        p.parseGenericType(typeName)
+    }
+
+    if p.cur.Lexeme != "{" {
+        p.errorf("expected '{' after %s type definition", typeName)
+        return nil
+    }
+
+    if typeName == "set" {
+        return p.parseSetLiteral()
+    }
+    return p.parseMapLiteral()
+}
+
+// parseParenthesizedExpr processa expressões entre parênteses
+func (p *Parser) parseParenthesizedExpr() Expr {
+    p.advanceToken()
+
+    expr := p.parseExpression(LOWEST)
+    if expr == nil {
+        return nil
+    }
+
+    if !p.expectAndConsume(")") {
+        return nil
+    }
+
+    return expr
+}
+
+// parseReferenceExpr processa expressões de referência (&expr)
+func (p *Parser) parseReferenceExpr() Expr {
+    p.advanceToken()
+
+    expr := p.parseExpression(PREFIX)
+    if expr == nil {
+        return nil
+    }
+
+    return &ReferenceExpr{Expr: expr}
+}
+
+// parseArrayLiteral processa literais de array
+func (p *Parser) parseArrayLiteral() Expr {
+    p.advanceToken()
+
+    elements := p.parseArrayElements()
+    if elements == nil || !p.expectAndConsume("]") {
+        return nil
+    }
+
+    return &ArrayLiteral{Elements: elements}
+}
+
+// parseArrayElements processa elementos de array
+func (p *Parser) parseArrayElements() []Expr {
+    elements := make([]Expr, 0, 3)
+
+    for p.cur.Lexeme != "]" && p.cur.Type != lexer.EOF {
+        elem := p.parseExpression(LOWEST)
+        if elem == nil {
+            return nil
+        }
+        elements = append(elements, elem)
+
+        if !p.match(",") {
+            if p.cur.Lexeme != "]" {
+                p.errorf("expected ',' or ']'")
+                return nil
+            }
+        }
+    }
+
+    return elements
+}
+
+// parseCollectionLiteral decide entre set e map literal (função de conveniência)
+func (p *Parser) parseCollectionLiteral() Expr {
+    savedCur, savedNxt := p.cur, p.nxt
+
+    p.advanceToken()
+
+    if p.cur.Lexeme == "}" {
+        p.cur, p.nxt = savedCur, savedNxt
+        return p.parseSetLiteral()
+    }
+
+    tempParser := *p
+    expr := tempParser.parseExpression(LOWEST)
+    if expr == nil {
+        p.cur, p.nxt = savedCur, savedNxt
+        return p.parseSetLiteral()
+    }
+
+    if tempParser.cur.Lexeme == ":" {
+        p.cur, p.nxt = savedCur, savedNxt
+        return p.parseMapLiteral()
+    }
+
+    p.cur, p.nxt = savedCur, savedNxt
+    return p.parseSetLiteral()
+}
+
+// parseSetLiteral processa literais de set
+func (p *Parser) parseSetLiteral() Expr {
+    p.advanceToken()
+    elements := make([]Expr, 0, 3)
+
+    for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
+        elem := p.parseExpression(LOWEST)
+        if elem == nil {
+            return nil
+        }
+        elements = append(elements, elem)
+
+        if p.cur.Lexeme == "," {
+            p.advanceToken()
+            if p.cur.Lexeme == "}" {
+                break
+            }
+        } else if p.cur.Lexeme != "}" {
+            p.handleSetLiteralError()
+            return nil
+        }
+    }
+
+    if !p.expectAndConsume("}") {
+        return nil
+    }
+    return &SetLiteral{Elements: elements}
+}
+
+// handleSetLiteralError lida com erros em set literals
+func (p *Parser) handleSetLiteralError() {
+    if p.cur.Type == lexer.EOF {
+        p.errorf("unexpected end of file in set literal")
+    } else {
+        p.errorf("expected ',' or '}' in set literal, got '%s'", p.cur.Lexeme)
+    }
+}
+
+// parseMapLiteral processa literais de map
+func (p *Parser) parseMapLiteral() Expr {
+    p.advanceToken()
+    entries := make([]*MapEntry, 0, 3)
+
+    for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
+        key := p.parseExpression(LOWEST)
+        if key == nil {
+            return nil
+        }
+
+        if !p.expectAndConsume(":") {
+            return nil
+        }
+
+        value := p.parseExpression(LOWEST)
+        if value == nil {
+            return nil
+        }
+
+        entries = append(entries, &MapEntry{Key: key, Value: value})
+
+        if p.cur.Lexeme == "," {
+            p.advanceToken()
+            if p.cur.Lexeme == "}" {
+                break
+            }
+        } else if p.cur.Lexeme != "}" {
+            p.handleMapLiteralError()
+            return nil
+        }
+    }
+
+    if !p.expectAndConsume("}") {
+        return nil
+    }
+    return &MapLiteral{Entries: entries}
+}
+
+// handleMapLiteralError lida com erros em map literals
+func (p *Parser) handleMapLiteralError() {
+    if p.cur.Type == lexer.EOF {
+        p.errorf("unexpected end of file in map literal")
+    } else {
+        p.errorf("expected ',' or '}' in map literal, got '%s'", p.cur.Lexeme)
+    }
+}
+
+// ============================
+// PARSING DE EXPRESSÕES ESPECIAIS
+// ============================
+
+// parseGenericCallOrExpr processa expressões genéricas
+func (p *Parser) parseGenericCallOrExpr() Expr {
+    p.advanceToken()
+    typeArgs := p.parseTypeArgumentsList()
+    if typeArgs == nil {
+        return nil
+    }
+
+    // Função ou struct genérica
+    if p.cur.Type == lexer.IDENT {
+        return p.parseGenericIdentExpr(typeArgs)
+    }
+
+    // Array genérico
+    if p.cur.Lexeme == "[" {
+        return p.parseGenericArrayExpr(typeArgs)
+    }
+
+    p.errorf("expected identifier or array literal after generic type arguments, got %s", p.cur.Lexeme)
+    return nil
+}
+
+// parseGenericIdentExpr processa identificadores genéricos
+func (p *Parser) parseGenericIdentExpr(typeArgs []Type) Expr {
+    ident := &Identifier{Name: p.cur.Lexeme}
+
+    // Struct literal genérico
+    if p.nxt.Lexeme == "{" {
+        p.advanceToken()
+        lit := p.parseBraceLiteral()
+        if lit == nil {
+            return nil
+        }
+        return &GenericSpecialization{Callee: lit, TypeArgs: typeArgs}
+    }
+
+    p.advanceToken()
+
+    // Chamada de função genérica
+    if p.cur.Lexeme == "(" {
+        p.advanceToken()
+        var args []Expr
+        if p.cur.Lexeme != ")" {
+            args = p.parseArgumentList()
+        }
+
+        if !p.expectAndConsume(")") {
+            return nil
+        }
+
+        return &GenericCallExpr{
+            Callee:   ident,
+            TypeArgs: typeArgs,
+            Args:     args,
+        }
+    }
+
+    // Referência especializada
+    return &GenericCallExpr{
+        Callee:   ident,
+        TypeArgs: typeArgs,
+        Args:     nil,
+    }
+}
+
+// parseGenericArrayExpr processa arrays genéricos
+func (p *Parser) parseGenericArrayExpr(typeArgs []Type) Expr {
+    arrayLit := p.parseArrayLiteral()
+    if arrayLit == nil {
+        return nil
+    }
+    return &GenericSpecialization{Callee: arrayLit, TypeArgs: typeArgs}
+}
+
+// ============================
+// PARSING DE PARÂMETROS GENÉRICOS
+// ============================
+
+// parseGenericParamsWithPrefix parseia generics com prefixo opcional "generic<T>"
+func (p *Parser) parseGenericParamsWithPrefix() []*GenericParam {
+    // Verifica se tem prefixo "generic"
+    hasPrefix := p.cur.Lexeme == "generic" && p.nxt.Lexeme == "<"
+    if hasPrefix {
+        p.advanceToken() // consome "generic"
+    }
+
+    // Se não tem "<", retorna nil
+    if p.cur.Lexeme != "<" {
+        if hasPrefix {
+            p.errorf("expected '<' after 'generic'")
+        }
+        return nil
+    }
+
+    return p.parseGenericParamsList()
+}
+
+// parseGenericParamsList parseia uma lista de parâmetros genéricos: <T, U, V>
+func (p *Parser) parseGenericParamsList() []*GenericParam {
+    if !p.expectAndConsume("<") {
+        return nil
+    }
+
+    params := p.parseGenericParamListItems()
+    if !p.expectAndConsume(">") {
+        return nil
+    }
+
+    return params
+}
+
+// parseGenericParamListItems parseia itens da lista de parâmetros genéricos
+func (p *Parser) parseGenericParamListItems() []*GenericParam {
+    params := make([]*GenericParam, 0, 2)
+
+    // Primeiro parâmetro
+    if !p.isValidGenericParam() {
+        p.errorf("expected generic parameter name, got %s", p.cur.Lexeme)
+        return nil
+    }
+
+    params = append(params, &GenericParam{Name: p.cur.Lexeme})
+    p.advanceToken()
+
+    // Parâmetros adicionais
+    for p.cur.Lexeme == "," {
+        p.advanceToken() // consome ","
+
+        if !p.isValidGenericParam() {
+            p.errorf("expected generic parameter name after ',', got %s", p.cur.Lexeme)
+            return nil
+        }
+
+        params = append(params, &GenericParam{Name: p.cur.Lexeme})
+        p.advanceToken()
+    }
+
+    return params
+}
+
+// ============================
+// PARSING DE ARGUMENTOS DE TIPO
+// ============================
+
+// parseTypeArgumentsList parseia uma lista de argumentos de tipo: <int, string>
+func (p *Parser) parseTypeArgumentsList() []Type {
+    if !p.expectAndConsume("<") {
+        return nil
+    }
+
+    typeArgs := p.parseTypeArgumentListItems()
+    if !p.expectAndConsume(">") {
+        return nil
+    }
+
+    return typeArgs
+}
+
+// parseTypeArgumentListItems parseia itens da lista de argumentos de tipo
+func (p *Parser) parseTypeArgumentListItems() []Type {
+    typeArgs := make([]Type, 0, 2)
+
+    // Primeiro tipo
+    typ := p.parseType()
+    if typ == nil {
+        p.errorf("expected type in generic arguments")
+        return nil
+    }
+    typeArgs = append(typeArgs, typ)
+
+    // Tipos adicionais
+    for p.cur.Lexeme == "," {
+        p.advanceToken() // consome ","
+
+        typ = p.parseType()
+        if typ == nil {
+            p.errorf("expected type after ',' in generic arguments")
+            return nil
+        }
+        typeArgs = append(typeArgs, typ)
+    }
+
+    return typeArgs
+}
+
+// ============================
+// FUNÇÕES AUXILIARES
+// ============================
+
+// isValidGenericParam verifica se o token atual é um nome válido para parâmetro genérico
+func (p *Parser) isValidGenericParam() bool {
+    // Aceita identificadores
+    if p.cur.Type == lexer.IDENT {
+        return true
+    }
+
+    // Aceita tokens genéricos
+    if p.cur.Type == lexer.GENERIC {
+        return true
+    }
+
+    // Aceita keywords que são letras maiúsculas únicas (como T, U, V)
+    if p.cur.Type == lexer.KEYWORD {
+        lexeme := p.cur.Lexeme
+        return len(lexeme) == 1 && lexeme[0] >= 'A' && lexeme[0] <= 'Z'
+    }
+
+    return false
+}
+
+// ============================
+// DECLARAÇÕES DE PACOTE
+// ============================
+
+// parsePackageDecl analisa uma declaração de pacote
+func (p *Parser) parsePackageDecl() Stmt {
+    p.advanceToken() // consome 'package'
+
+    if p.cur.Type != lexer.IDENT && p.cur.Lexeme != "." {
+        p.errorf("expected package name after 'package'")
+        return nil
+    }
+
+    name := p.parseQualifiedName()
+    if name == "" {
+        return nil
+    }
+
+    p.consumeOptionalSemicolon()
+    return &PackageDecl{Name: name}
+}
+
+// parseQualifiedName parseia um nome qualificado (com pontos)
+func (p *Parser) parseQualifiedName() string {
+    name := p.cur.Lexeme
+    p.advanceToken()
+
+    for p.cur.Lexeme == "." {
+        p.advanceToken() // consome '.'
+        if p.cur.Type != lexer.IDENT {
+            p.errorf("expected identifier after '.' in package name")
+            return ""
+        }
+        name += "." + p.cur.Lexeme
+        p.advanceToken()
+    }
+
+    return name
+}
+
+// ============================
+// DECLARAÇÕES DE IMPORTAÇÃO
+// ============================
+
+// parseImportDecl analisa uma declaração de importação
+func (p *Parser) parseImportDecl() Stmt {
+    p.advanceToken() // consome 'import'
+
+    // CASO 1: Importação seletiva com chaves
+    if p.cur.Lexeme == "{" {
+        return p.parseSelectiveImport()
+    }
+
+    // CASO 2: Caminho com pontos (importação de módulo inteiro)
+    if p.isQualifiedPath() {
+        return p.parseModuleImport()
+    }
+
+    // CASO 3: Importação de lista sem chaves ou módulo simples
+    return p.parseImportListOrModule()
+}
+
+// isQualifiedPath verifica se é um caminho qualificado (com pontos)
+func (p *Parser) isQualifiedPath() bool {
+    return p.cur.Type == lexer.IDENT && p.nxt.Lexeme == "."
+}
+
+// parseModuleImport parseia importação de módulo inteiro
+func (p *Parser) parseModuleImport() Stmt {
+    path := p.parseQualifiedName()
+    if path == "" {
+        return nil
+    }
+
+    p.consumeOptionalSemicolon()
+    return &ImportDecl{Path: path, Imports: nil}
+}
+
+// parseImportListOrModule parseia importação de lista ou módulo simples
+func (p *Parser) parseImportListOrModule() Stmt {
+    specs := p.parseImportSpecListWithoutBraces()
+    if specs == nil {
+        return nil
+    }
+
+    // Se tem 'from', é importação de lista
+    if p.cur.Lexeme == "from" {
+        return p.parseImportListWithFrom(specs)
+    }
+
+    // Caso contrário, é importação de módulo simples
+    return p.parseSimpleModuleImport(specs)
+}
+
+// parseImportListWithFrom parseia importação de lista com 'from'
+func (p *Parser) parseImportListWithFrom(specs []*ImportSpec) Stmt {
+    p.advanceToken() // consome 'from'
+
+    path := p.parseModulePath()
+    if path == "" {
+        return nil
+    }
+
+    p.consumeOptionalSemicolon()
+    return &ImportDecl{Path: path, Imports: specs}
+}
+
+// parseSimpleModuleImport parseia importação de módulo simples
+func (p *Parser) parseSimpleModuleImport(specs []*ImportSpec) Stmt {
+    if len(specs) != 1 {
+        p.errorf("expected single module import or list with 'from'")
+        return nil
+    }
+
+    if specs[0].Alias != "" {
+        p.errorf("module import cannot have alias")
+        return nil
+    }
+
+    path := specs[0].Name
+    p.consumeOptionalSemicolon()
+    return &ImportDecl{Path: path, Imports: nil}
+}
+
+// parseModulePath parseia caminho do módulo (identificador ou string)
+func (p *Parser) parseModulePath() string {
+    switch p.cur.Type {
+    case lexer.IDENT:
+        path := p.cur.Lexeme
+        p.advanceToken()
+        return path
+    case lexer.STRING:
+        path := p.cur.Value
+        p.advanceToken()
+        return path
+    default:
+        p.errorf("expected module name or path after 'from'")
+        return ""
+    }
+}
+
+// ============================
+// IMPORT SELEITVA COM CHAVES
+// ============================
+
+// parseSelectiveImport analisa importação seletiva: import { PI, sqrt as sq } from math
+func (p *Parser) parseSelectiveImport() Stmt {
+    if !p.expectAndConsume("{") {
+        return nil
+    }
+
+    imports := p.parseImportSpecList()
+    if imports == nil {
+        return nil
+    }
+
+    if !p.expectAndConsume("}") {
+        return nil
+    }
+
+    if !p.expectAndConsume("from") {
+        p.errorf("expected 'from' after import list")
+        return nil
+    }
+
+    path := p.parseModulePath()
+    if path == "" {
+        return nil
+    }
+
+    p.consumeOptionalSemicolon()
+    return &ImportDecl{Path: path, Imports: imports}
+}
+
+// ============================
+// LISTAS DE ESPECIFICAÇÕES
+// ============================
+
+// parseImportSpecList parseia lista de especificações de importação
+func (p *Parser) parseImportSpecList() []*ImportSpec {
+    return p.parseImportSpecListInternal(true)
+}
+
+// parseImportSpecListWithoutBraces parseia lista sem chaves
+func (p *Parser) parseImportSpecListWithoutBraces() []*ImportSpec {
+    return p.parseImportSpecListInternal(false)
+}
+
+// parseImportSpecListInternal implementação comum para listas de importação
+func (p *Parser) parseImportSpecListInternal(withBraces bool) []*ImportSpec {
+    imports := make([]*ImportSpec, 0, 3)
+
+    for {
+        p.skipCommas()
+
+        // Verificar se chegou ao fim
+        if p.isImportListEnd(withBraces) {
+            break
+        }
+
+        if p.cur.Type != lexer.IDENT {
+            p.errorf("expected identifier in import list, got %s", p.cur.Lexeme)
+            return nil
+        }
+
+        spec := p.parseImportSpec()
+        if spec == nil {
+            return nil
+        }
+        imports = append(imports, spec)
+
+        // Se o próximo token não for vírgula, terminamos
+        if p.cur.Lexeme != "," {
+            break
+        }
+    }
+
+    return imports
+}
+
+// isImportListEnd verifica fim da lista de importação
+func (p *Parser) isImportListEnd(withBraces bool) bool {
+    if withBraces {
+        return p.cur.Lexeme == "}" || p.cur.Lexeme == "from" ||
+            p.cur.Lexeme == ";" || p.cur.Type == lexer.EOF
+    }
+    return p.cur.Lexeme == "from" || p.cur.Lexeme == ";" || p.cur.Type == lexer.EOF
+}
+
+// parseImportSpec parseia uma especificação de importação individual
+func (p *Parser) parseImportSpec() *ImportSpec {
+    name := p.cur.Lexeme
+    p.advanceToken()
+
+    alias := ""
+    if p.cur.Lexeme == "as" {
+        p.advanceToken() // consome 'as'
+
+        if p.cur.Type != lexer.IDENT {
+            p.errorf("expected alias name after 'as'")
+            return nil
+        }
+
+        alias = p.cur.Lexeme
+        p.advanceToken()
+    }
+
+    return &ImportSpec{Name: name, Alias: alias}
+}
+
+// skipCommas consome vírgulas consecutivas
+func (p *Parser) skipCommas() {
+    for p.cur.Lexeme == "," {
+        p.advanceToken()
+    }
+}
+
+// ============================
+// DECLARAÇÕES DE EXPORTAÇÃO
+// ============================
+
+// parseExportDecl analisa uma declaração de exportação
+func (p *Parser) parseExportDecl() Stmt {
+    p.advanceToken() // consome 'export'
+
+    exports := p.parseExportSpecList()
+    if exports == nil {
+        return nil
+    }
+
+    p.consumeOptionalSemicolon()
+    return &ExportDecl{Exports: exports}
+}
+
+// parseExportSpecList parseia lista de especificações de exportação
+func (p *Parser) parseExportSpecList() []*ExportSpec {
+    exports := make([]*ExportSpec, 0, 3)
+
+    for {
+        if p.cur.Type != lexer.IDENT {
+            p.errorf("expected identifier in export list, got %s", p.cur.Lexeme)
+            return nil
+        }
+
+        name := p.cur.Lexeme
+        p.advanceToken()
+
+        alias := ""
+        if p.cur.Lexeme == "as" {
+            p.advanceToken() // consome 'as'
+
+            if p.cur.Type != lexer.IDENT {
+                p.errorf("expected alias name after 'as'")
+                return nil
+            }
+
+            alias = p.cur.Lexeme
+            p.advanceToken()
+        }
+
+        exports = append(exports, &ExportSpec{Name: name, Alias: alias})
+
+        // Verificar se tem mais
+        if p.cur.Lexeme != "," {
+            break
+        }
+
+        p.advanceToken() // consome ','
+
+        // Se após vírgula não tem nada, quebra
+        if p.cur.Type == lexer.EOF {
+            break
+        }
+    }
+
+    return exports
+}
+
+// ============================
+// PARSING DE TIPOS - FUNÇÃO PRINCIPAL
+// ============================
+
+// parseType analisa um tipo, incluindo tipos union (T1 | T2 | T3)
+func (p *Parser) parseType() Type {
+    left := p.parseSingleType()
+    if left == nil {
+        return nil
+    }
+
+    if p.cur.Lexeme != "|" {
+        return left
+    }
+
+    return p.parseUnionType(left)
+}
+
+// ============================
+// TIPOS UNION
+// ============================
+
+// parseUnionType analisa um tipo union (T1 | T2 | T3)
+func (p *Parser) parseUnionType(firstType Type) Type {
+    types := []Type{firstType}
+
+    for p.cur.Lexeme == "|" {
+        p.advanceToken()
+
+        nextType := p.parseSingleType()
+        if nextType == nil {
+            return nil
+        }
+        types = append(types, nextType)
+    }
+
+    return &UnionType{Types: types}
+}
+
+// ============================
+// TIPOS SIMPLES (BASE)
+// ============================
+
+// parseSingleType analisa um tipo simples (sem união)
+func (p *Parser) parseSingleType() Type {
+    if !p.isValidTypeStart() {
+        return nil
+    }
+
+    var typ Type
+    switch p.cur.Lexeme {
+    case "set", "map":
+        // CORREÇÃO: Salvar o nome, avançar o token e então chamar parseGenericType
+        name := p.cur.Lexeme
+        p.advanceToken()
+        typ = p.parseGenericType(name)
+    default:
+        typ = p.parseBaseType()
+    }
+
+    return p.parseTypeModifiers(typ)
+}
+
+// isValidTypeStart verifica se o token atual pode iniciar um tipo
+func (p *Parser) isValidTypeStart() bool {
+    return isTypeKeyword(p.cur.Lexeme) || p.cur.Type == lexer.IDENT || p.cur.Type == lexer.GENERIC
+}
+
+// parseBaseType analisa um tipo base (primitivo ou identificador)
+func (p *Parser) parseBaseType() Type {
+    name := p.cur.Lexeme
+
+    if !p.isValidBaseTypeName(name) {
+        return nil
+    }
+
+    p.advanceToken()
+
+    // Verificar se é um tipo genérico com parâmetros: List<T>
+    if p.cur.Lexeme == "<" {
+        return p.parseGenericType(name)
+    }
+
+    // Tipo primitivo ou identificador de tipo
+    return &IdentifierType{Name: name}
+}
+
+// isValidBaseTypeName verifica se o nome é válido para tipo base
+func (p *Parser) isValidBaseTypeName(name string) bool {
+    return isTypeKeyword(name) || (len(name) > 0 && name[0] >= 'A' && name[0] <= 'Z')
+}
+
+// ============================
+// TIPOS GENÉRICOS
+// ============================
+
+// parseGenericType analisa um tipo genérico (List<T>, Set<T>, Map<K,V>)
+func (p *Parser) parseGenericType(name string) Type {
+    // O token atual deve ser '<' (o nome já foi consumido)
+    if p.cur.Lexeme != "<" {
+        return nil
+    }
+
+    p.advanceToken()
+
+    // Processa baseado no tipo de coleção
+    switch name {
+    case "set":
+        return p.parseSetType()
+    case "map":
+        return p.parseMapType()
+    default:
+        return p.parseUserDefinedGenericType(name)
+    }
+}
+
+// parseSetType analisa tipo de conjunto (Set<T>)
+func (p *Parser) parseSetType() Type {
+    elemType := p.parseType()
+    if elemType == nil || !p.expectAndConsume(">") {
+        return nil
+    }
+
+    return &SetType{ElementType: elemType}
+}
+
+// parseMapType analisa tipo de mapa (Map<K,V>)
+func (p *Parser) parseMapType() Type {
+    keyType := p.parseType()
+    if keyType == nil || !p.expectAndConsume(",") {
+        return nil
+    }
+
+    valueType := p.parseType()
+    if valueType == nil || !p.expectAndConsume(">") {
+        return nil
+    }
+
+    return &MapType{KeyType: keyType, ValueType: valueType}
+}
+
+// parseUserDefinedGenericType analisa tipos genéricos definidos pelo usuário
+func (p *Parser) parseUserDefinedGenericType(name string) Type {
+    // Coletar todos os argumentos de tipo
+    typeArgs := p.parseTypeArgumentList()
+    if typeArgs == nil || !p.expectAndConsume(">") {
+        return nil
+    }
+
+    return &GenericType{
+        Name:     name,
+        TypeArgs: typeArgs,
+    }
+}
+
+// parseTypeArgumentList analisa lista de argumentos de tipo para genéricos
+func (p *Parser) parseTypeArgumentList() []Type {
+    typeArgs := make([]Type, 0, 2)
+
+    firstTypeArg := p.parseType()
+    if firstTypeArg == nil {
+        return nil
+    }
+    typeArgs = append(typeArgs, firstTypeArg)
+
+    for p.cur.Lexeme == "," {
+        p.advanceToken()
+        nextTypeArg := p.parseType()
+        if nextTypeArg == nil {
+            return nil
+        }
+        typeArgs = append(typeArgs, nextTypeArg)
+    }
+
+    return typeArgs
+}
+
+// ============================
+// MODIFICADORES DE TIPO
+// ============================
+
+// parseTypeModifiers aplica modificadores a um tipo (? nullable, * pointer, [] array)
+func (p *Parser) parseTypeModifiers(base Type) Type {
+    current := base
+
+    for {
+        switch p.cur.Lexeme {
+        case "?":
+            current = &NullableType{BaseType: current}
+            p.advanceToken()
+        case "*":
+            current = &PointerType{BaseType: current}
+            p.advanceToken()
+        case "[":
+            current = p.parseArrayType(current)
+        default:
+            return current
+        }
+    }
+}
+
+// parseArrayType analisa um tipo de array (elementType[])
+func (p *Parser) parseArrayType(elementType Type) Type {
+    p.advanceToken() // consome '['
+
+    var size Expr
+    if p.cur.Lexeme != "]" {
+        size = p.parseExpression(LOWEST)
+    }
+
+    if !p.expectAndConsume("]") {
+        return nil
+    }
+
+    return &ArrayType{ElementType: elementType, Size: size}
+}
+
+// ============================
+// FUNÇÕES AUXILIARES DE VERIFICAÇÃO
+// ============================
+
+// isInfixOperator verifica se o token é um operador infixo
+func (p *Parser) isInfixOperator(token lexer.Token) bool {
+    return token.Type == lexer.OP && infixOperators[token.Lexeme]
+}
+
+// isPostfixOperator verifica se o token é um operador pós-fixo
+func (p *Parser) isPostfixOperator(token lexer.Token) bool {
+    return token.Type == lexer.OP && postfixOperators[token.Lexeme]
+}
+
+// isPrefixOperator verifica se o token é um operador pré-fixo
+func (p *Parser) isPrefixOperator(token lexer.Token) bool {
+    return token.Type == lexer.OP && prefixOperators[token.Lexeme]
+}
+
+// precedenceOf retorna a precedência de um operador
+func (p *Parser) precedenceOf(op string) int {
+    if prec, exists := precedences[op]; exists {
+        return prec
+    }
+    return LOWEST
+}

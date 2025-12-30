@@ -51,6 +51,15 @@ func main() {
         string[2] arr2 = ["Hello", "World"]
         var arr3 = ["Hello", "World"] // string[2] 
         string[] linked
+
+        arr[0] = "Hello"
+        arr[1] = "World"
+
+        linked = ["Hello", "World"]
+        linked[0] = "Hello"
+        linked = append(linked, "!")
+        linked = remove(linked, "!")
+        linked = removeIndex(linked, 0)
         `)
 
 		testCase("Matrixes", `
@@ -59,6 +68,17 @@ func main() {
             [1, 2],
             [3, 4]
         ]
+
+        matrix[0][0] = 1
+        matrix[0][1] = 2
+        matrix[1][0] = 3
+        matrix[1][1] = 4
+
+        matrix2[0][0] = 1
+        matrix2[0][1] = 2
+        matrix2[1][0] = 3
+        matrix2[1][1] = 4
+
         var matrix3 = [
             [1, 2],
             [3, 4]
@@ -499,6 +519,204 @@ func main() {
             int j = --i
             bool res = (i > 5) && (j < 20)
         `)
+
+	case "packages":
+		testCase("Criando pacotes", `
+        package math
+        int a = 25
+        export a
+    `)
+
+		testCase("Múltiplas exportações em pacote", `
+        package utils
+        int version = 1
+        string app_name = "AlphaApp"
+        bool debug = false
+        
+        export version
+        export app_name
+        export debug
+    `)
+
+		testCase("Exportação de funções", `
+        package calculator
+        int function add(int a, int b) {
+            return a + b
+        }
+        
+        int function multiply(int a, int b) {
+            return a * b
+        }
+        
+        export add
+        export multiply
+    `)
+
+		testCase("Exportação de tipos complexos", `
+        package geometry
+        struct Point {
+            float x
+            float y
+        }
+        
+        struct Circle {
+            Point center
+            float radius
+        }
+        
+        export Point
+        export Circle
+    `)
+
+		testCase("Constantes em pacote", `
+        package constants
+        const MAX_SIZE = 100
+        const PI = 3.14159
+        const GREETING = "Hello"
+        
+        export MAX_SIZE
+        export PI
+        export GREETING
+    `)
+
+		testCase("Pacote com dependências", `
+        package advanced_math
+        import math.PI
+        
+        float function calculate_circle_area(float radius) {
+            return PI * radius * radius
+        }
+        
+        export calculate_circle_area
+    `)
+
+		testCase("Pacote com dependências 2", `
+        package advanced_math
+        import math
+        
+        float function calculate_circle_area(float radius) {
+            return math.PI * radius * radius
+        }
+        
+        export calculate_circle_area
+    `)
+
+		testCase("Pacote com alias", `
+        package advanced_math
+        import PI, sqrt as sq from math
+        
+        float function calculate_circle_area(float radius) {
+            return PI * sq(radius)
+        }
+        
+        export calculate_circle_area
+    `)
+
+		testCase("Pacotes aninhados", `
+        package company.utils
+        string function format_name(string first, string last) {
+            return first + " " + last
+        }
+        
+        export format_name
+    `)
+
+		testCase("Variáveis privadas em pacote", `
+        package config
+        string api_key = "secret123"  // privada
+        string api_url = "https://api.example.com"
+        
+        // Só exporta a URL
+        export api_url
+    `)
+
+		testCase("Exportação com alias", `
+        package external
+        string function very_long_function_name() {
+            return "result"
+        }
+        
+        export very_long_function_name as short_name
+    `)
+
+		testCase("Interface exportada", `
+        package shapes
+        
+        struct Rectangle {
+            float width
+            float height
+        }
+        
+        export Rectangle
+    `)
+
+		testCase("Reexportação de pacote", `
+        package extended_math
+        
+        // Reexporta PI com outro nome
+        const PI = 3.14
+        export PI
+        
+        // Adiciona funções próprias
+        float function square(float x) {
+            return x * x
+        }
+        export square
+    `)
+
+		testCase("Declaração de versão de pacote", `
+        package database.v2
+        string function connect(string url) {
+            return "Connected to " + url
+        }
+        
+        export connect
+    `)
+
+		testCase("Escopo de variáveis de pacote", `
+        package counter
+        int count = 0
+        
+        int function increment() {
+            count += 1
+            return count
+        }
+        
+        void function reset() {
+            count = 0
+        }
+        
+        export increment, reset, count
+    `)
+
+		testCase("Pacote com documentação", `
+        package strings
+        
+        // Concatena duas strings
+        string function concat(string a, string b) {
+            return a + b
+        }
+        
+        export concat
+    `)
+
+		testCase("Pacotes aninhados", `
+        package base
+        string function greet() {
+            return "Hello"
+        }
+        export greet
+        
+        string function formal_greet() {
+            return greet() + ", Sir"
+        }
+        export formal_greet
+    `)
+
+		testCase("Pacote vazio", `
+        package placeholder
+        // Nada para exportar ainda
+    `)
 
 	default:
 		panic("Give a correct case name")

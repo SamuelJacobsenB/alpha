@@ -1,0 +1,475 @@
+package lexer
+
+import (
+	"bytes"
+)
+
+// ============================
+// TIPOS E CONSTANTES
+// ============================
+
+type TokenType int
+
+const (
+	EOF TokenType = iota
+	ERROR
+	KEYWORD
+	IDENT
+	INT
+	FLOAT
+	STRING
+	OP
+	GENERIC // T, U, etc. (parâmetros genéricos)
+)
+
+type Token struct {
+	Type   TokenType
+	Lexeme string // texto bruto
+	Value  string // valor normalizado (p.ex. string sem aspas)
+	Line   int
+	Col    int
+}
+
+// ============================
+// PALAVRAS-CHAVE
+// ============================
+
+var keywords = map[string]struct{}{
+	// Tipos primitivos
+	"int": {}, "string": {}, "float": {}, "bool": {}, "void": {},
+	"byte": {}, "char": {}, "double": {}, "error": {}, "component": {},
+
+	// Declarações
+	"var": {}, "const": {}, "function": {}, "type": {}, "enum": {},
+	"struct": {},
+
+	// Controle de fluxo
+	"if": {}, "else": {}, "while": {}, "do": {}, "for": {}, "in": {}, "return": {},
+	"break": {}, "continue": {}, "switch": {}, "case": {}, "default": {},
+
+	// Literais e valores
+	"true": {}, "false": {}, "null": {},
+
+	// Módulos
+	"import": {}, "export": {}, "package": {}, "from": {}, "as": {},
+
+	// Modificadores
+	"implement": {}, "init": {}, "self": {}, "public": {}, "private": {},
+
+	// Utilitários
+	"generic": {}, "length": {}, "append": {}, "remove": {}, "removeIndex": {},
+}
+
+// ============================
+// OPERADORES
+// ============================
+
+var (
+	twoCharOps = map[string]bool{
+		"==": true, "!=": true, "<=": true, ">=": true,
+		"&&": true, "||": true, "++": true, "--": true,
+		"+=": true, "-=": true, "*=": true, "/=": true,
+	}
+
+	oneCharOps = map[byte]bool{
+		'+': true, '-': true, '*': true, '/': true,
+		'%': true, '=': true, '!': true, '&': true,
+		'|': true, ';': true, ',': true, '.': true,
+		':': true, '(': true, ')': true, '{': true,
+		'}': true, '[': true, ']': true, '<': true,
+		'>': true,
+	}
+)
+
+// ============================
+// SCANNER
+// ============================
+
+type Scanner struct {
+	src           []byte
+	index         int       // próximo byte a ler
+	start         int       // início do token corrente
+	line          int       // linha atual (1-based)
+	col           int       // coluna atual (1-based)
+	tokenLine     int       // linha onde token corrente começou
+	tokenCol      int       // coluna onde token corrente começou
+	lastTokenType TokenType // último token emitido
+}
+
+func NewScanner(src string) *Scanner {
+	b := []byte(src)
+	return &Scanner{
+		src:   b,
+		index: 0,
+		line:  1,
+		col:   1,
+	}
+}
+
+// ============================
+// FUNÇÕES AUXILIARES DO SCANNER
+// ============================
+
+func (s *Scanner) isEOF() bool { return s.index >= len(s.src) }
+
+func (s *Scanner) peek(off int) byte {
+	i := s.index + off
+	if i >= 0 && i < len(s.src) {
+		return s.src[i]
+	}
+	return 0
+}
+
+func (s *Scanner) advance() {
+	if s.isEOF() {
+		return
+	}
+
+	ch := s.src[s.index]
+	s.index++
+
+	switch ch {
+	case '\n':
+		s.line++
+		s.col = 1
+	case '\r':
+		// Tratar \r\n como uma única quebra de linha
+		if s.index < len(s.src) && s.src[s.index] == '\n' {
+			s.index++
+		}
+		s.line++
+		s.col = 1
+	default:
+		s.col++
+	}
+}
+
+// ============================
+// EMISSÃO DE TOKENS
+// ============================
+
+func (s *Scanner) emit(t TokenType) Token {
+	tok := Token{
+		Type:   t,
+		Lexeme: string(s.src[s.start:s.index]),
+		Line:   s.tokenLine,
+		Col:    s.tokenCol,
+	}
+
+	if t == STRING && s.index-s.start >= 2 {
+		tok.Value = unescapeStringBytes(s.src[s.start+1 : s.index-1])
+	} else {
+		tok.Value = tok.Lexeme
+	}
+
+	s.lastTokenType = t
+	return tok
+}
+
+func (s *Scanner) errorToken(msg string) Token {
+	return Token{
+		Type:   ERROR,
+		Lexeme: msg,
+		Value:  msg,
+		Line:   s.line,
+		Col:    s.col,
+	}
+}
+
+// ============================
+// FUNÇÕES DE LEXING PRINCIPAIS
+// ============================
+
+func (s *Scanner) NextToken() Token {
+	s.skipSpaceAndComments()
+
+	if s.isEOF() {
+		return Token{Type: EOF, Line: s.line, Col: s.col}
+	}
+
+	s.start = s.index
+	s.tokenLine = s.line
+	s.tokenCol = s.col
+
+	ch := s.peek(0)
+
+	switch {
+	case isLetter(ch) || ch == '_':
+		return s.lexIdentifier()
+	case isDigit(ch):
+		return s.lexNumber()
+	case ch == '"':
+		return s.lexString()
+	default:
+		return s.lexOperator()
+	}
+}
+
+// ============================
+// SKIP DE ESPAÇOS E COMENTÁRIOS
+// ============================
+
+func (s *Scanner) skipSpaceAndComments() {
+	for !s.isEOF() {
+		ch := s.peek(0)
+
+		switch {
+		case ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n':
+			s.advance()
+		case ch == '/' && s.peek(1) == '/':
+			s.skipLineComment()
+		case ch == '/' && s.peek(1) == '*':
+			s.skipBlockComment()
+		default:
+			return
+		}
+	}
+}
+
+func (s *Scanner) skipLineComment() {
+	// Avança "//"
+	s.advance()
+	s.advance()
+
+	// Avança até o fim da linha
+	for !s.isEOF() && s.peek(0) != '\n' {
+		s.advance()
+	}
+}
+
+func (s *Scanner) skipBlockComment() {
+	// Avança "/*"
+	s.advance()
+	s.advance()
+
+	for !s.isEOF() {
+		if s.peek(0) == '*' && s.peek(1) == '/' {
+			// Avança "*/"
+			s.advance()
+			s.advance()
+			return
+		}
+		s.advance()
+	}
+}
+
+// ============================
+// LEXING DE IDENTIFICADORES
+// ============================
+
+func (s *Scanner) lexIdentifier() Token {
+	// Consome letras, dígitos e underscore
+	for !s.isEOF() && (isLetter(s.peek(0)) || isDigit(s.peek(0)) || s.peek(0) == '_') {
+		s.advance()
+	}
+
+	// Permite '?' apenas no final
+	if !s.isEOF() && s.peek(0) == '?' && s.index > s.start {
+		s.advance()
+	}
+
+	lex := string(s.src[s.start:s.index])
+
+	// Verifica se é keyword
+	if _, isKeyword := keywords[lex]; isKeyword {
+		return s.emit(KEYWORD)
+	}
+
+	// Verifica se é tipo genérico (letra maiúscula única)
+	if len(lex) == 1 && lex[0] >= 'A' && lex[0] <= 'Z' {
+		return s.emit(GENERIC)
+	}
+
+	return s.emit(IDENT)
+}
+
+// ============================
+// LEXING DE NÚMEROS
+// ============================
+
+func (s *Scanner) lexNumber() Token {
+	// Parte inteira
+	for !s.isEOF() && isDigit(s.peek(0)) {
+		s.advance()
+	}
+
+	// Verifica se tem parte decimal
+	hasDecimal := false
+	if s.peek(0) == '.' && isDigit(s.peek(1)) {
+		s.advance() // consume '.'
+		hasDecimal = true
+		for !s.isEOF() && isDigit(s.peek(0)) {
+			s.advance()
+		}
+	}
+
+	// Verifica expoente
+	if ch := s.peek(0); ch == 'e' || ch == 'E' {
+		if !s.parseExponent() {
+			return s.errorToken("malformed exponent")
+		}
+		hasDecimal = true
+	}
+
+	if hasDecimal {
+		return s.emit(FLOAT)
+	}
+	return s.emit(INT)
+}
+
+func (s *Scanner) parseExponent() bool {
+	s.advance() // consume 'e' or 'E'
+
+	// Sinal opcional
+	if s.peek(0) == '+' || s.peek(0) == '-' {
+		s.advance()
+	}
+
+	// Deve ter pelo menos um dígito
+	if !isDigit(s.peek(0)) {
+		return false
+	}
+
+	// Consome dígitos do expoente
+	for !s.isEOF() && isDigit(s.peek(0)) {
+		s.advance()
+	}
+
+	return true
+}
+
+// ============================
+// LEXING DE STRINGS
+// ============================
+
+func (s *Scanner) lexString() Token {
+	s.advance() // consume opening "
+
+	for !s.isEOF() {
+		ch := s.peek(0)
+		s.advance()
+
+		if ch == '\\' && !s.isEOF() {
+			s.advance() // skip escaped character
+		} else if ch == '"' {
+			return s.emit(STRING)
+		}
+	}
+
+	return s.errorToken("unterminated string")
+}
+
+// ============================
+// LEXING DE OPERADORES
+// ============================
+
+func (s *Scanner) lexOperator() Token {
+	ch1 := s.peek(0)
+	ch2 := s.peek(1)
+
+	// Verifica operadores de 2 caracteres
+	if ch2 != 0 && twoCharOps[string(ch1)+string(ch2)] {
+		s.advance()
+		s.advance()
+		return s.emit(OP)
+	}
+
+	// Verifica operadores de 1 caractere
+	if oneCharOps[ch1] {
+		// Verificação especial para determinar se é um tipo genérico
+		if ch1 == '<' && s.isLikelyGeneric() {
+			// Trata como delimitador de tipo genérico
+			s.advance()
+			return s.emit(OP) // Continua sendo OP, mas o parser saberá pelo contexto
+		}
+		s.advance()
+		return s.emit(OP)
+	}
+
+	// Operador não reconhecido
+	s.advance()
+	return s.errorToken("operador não reconhecido: " + string(ch1))
+}
+
+func (s *Scanner) isLikelyGeneric() bool {
+	// Olha para trás para verificar se há uma palavra-chave que indica genéricos
+	if s.index == 0 {
+		return false
+	}
+
+	// Encontra o início do token anterior
+	i := s.index - 1
+	// Retrocede enquanto encontra espaços ou quebras de linha
+	for i >= 0 && (s.src[i] == ' ' || s.src[i] == '\t' || s.src[i] == '\n' || s.src[i] == '\r') {
+		i--
+	}
+
+	if i < 0 {
+		return false
+	}
+
+	// Encontra o início da palavra anterior
+	start := i
+	for start >= 0 && (isLetter(s.src[start]) || isDigit(s.src[start]) || s.src[start] == '_') {
+		start--
+	}
+	start++ // Ajusta para o primeiro caractere da palavra
+
+	if start > i {
+		return false
+	}
+
+	// Verifica se a palavra anterior é "generic" ou uma letra maiúscula única (tipo genérico)
+	prevWord := string(s.src[start : i+1])
+
+	// Se for "generic", é definitivamente um tipo genérico
+	if prevWord == "generic" {
+		return true
+	}
+
+	// Se for uma letra maiúscula única, também pode ser parte de um tipo genérico
+	if len(prevWord) == 1 && prevWord[0] >= 'A' && prevWord[0] <= 'Z' {
+		return true
+	}
+
+	return false
+}
+
+// ============================
+// FUNÇÕES UTILITÁRIAS
+// ============================
+
+func isLetter(ch byte) bool {
+	return ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z'
+}
+
+func isDigit(ch byte) bool {
+	return ch >= '0' && ch <= '9'
+}
+
+func unescapeStringBytes(b []byte) string {
+	// Verifica se não há escapes para retornar rápido
+	if bytes.IndexByte(b, '\\') == -1 {
+		return string(b)
+	}
+
+	result := make([]byte, 0, len(b))
+	for i := 0; i < len(b); i++ {
+		if b[i] == '\\' && i+1 < len(b) {
+			i++
+			result = append(result, escapeMap[b[i]])
+		} else {
+			result = append(result, b[i])
+		}
+	}
+
+	return string(result)
+}
+
+var escapeMap = [256]byte{
+	'n':  '\n',
+	't':  '\t',
+	'r':  '\r',
+	'"':  '"',
+	'\\': '\\',
+}

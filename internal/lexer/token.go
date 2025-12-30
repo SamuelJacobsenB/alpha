@@ -42,12 +42,8 @@ var keywords = map[string]struct{}{
 	"import": {}, "export": {}, "package": {}, "from": {}, "as": {},
 
 	// Modificadores
-	"implement": {}, // Para blocos de implementação
-	"init":      {}, // Para construtores
-	"self":      {},
-	"public":    {},
-	"private":   {},
+	"implement": {}, "init": {}, "self": {}, "public": {}, "private": {},
 
 	// Utilitários
-	"typeof": {}, "generic": {}, "length": {},
+	"generic": {}, "length": {}, "append": {}, "remove": {}, "removeIndex": {},
 }

@@ -3,7 +3,7 @@ package parser
 import "github.com/alpha/internal/lexer"
 
 // ============================
-// Lógica Unificada de Generics
+// TIPOS E CONSTANTES
 // ============================
 
 // GenericContext define o contexto onde generics são parseados
@@ -21,27 +21,22 @@ type ParsedGenerics struct {
 }
 
 // ============================
-// Funções Principais Unificadas
+// PARSING DE PARÂMETROS GENÉRICOS
 // ============================
 
 // parseGenericParamsWithPrefix parseia generics com prefixo opcional "generic<T>"
 func (p *Parser) parseGenericParamsWithPrefix() []*GenericParam {
-	hasPrefix := false
-
 	// Verifica se tem prefixo "generic"
-	if p.cur.Lexeme == "generic" && p.nxt.Lexeme == "<" {
-		p.advanceToken() // consume "generic"
-		hasPrefix = true
+	hasPrefix := p.cur.Lexeme == "generic" && p.nxt.Lexeme == "<"
+	if hasPrefix {
+		p.advanceToken() // consome "generic"
 	}
 
 	// Se não tem "<", retorna nil
 	if p.cur.Lexeme != "<" {
-		return nil
-	}
-
-	// Se tinha prefixo mas não tem "<", é erro
-	if hasPrefix && p.cur.Lexeme != "<" {
-		p.errorf("expected '<' after 'generic'")
+		if hasPrefix {
+			p.errorf("expected '<' after 'generic'")
+		}
 		return nil
 	}
 
@@ -54,6 +49,16 @@ func (p *Parser) parseGenericParamsList() []*GenericParam {
 		return nil
 	}
 
+	params := p.parseGenericParamListItems()
+	if !p.expectAndConsume(">") {
+		return nil
+	}
+
+	return params
+}
+
+// parseGenericParamListItems parseia itens da lista de parâmetros genéricos
+func (p *Parser) parseGenericParamListItems() []*GenericParam {
 	params := make([]*GenericParam, 0, 2)
 
 	// Primeiro parâmetro
@@ -67,7 +72,7 @@ func (p *Parser) parseGenericParamsList() []*GenericParam {
 
 	// Parâmetros adicionais
 	for p.cur.Lexeme == "," {
-		p.advanceToken() // consume ","
+		p.advanceToken() // consome ","
 
 		if !p.isValidGenericParam() {
 			p.errorf("expected generic parameter name after ',', got %s", p.cur.Lexeme)
@@ -78,12 +83,12 @@ func (p *Parser) parseGenericParamsList() []*GenericParam {
 		p.advanceToken()
 	}
 
-	if !p.expectAndConsume(">") {
-		return nil
-	}
-
 	return params
 }
+
+// ============================
+// PARSING DE ARGUMENTOS DE TIPO
+// ============================
 
 // parseTypeArgumentsList parseia uma lista de argumentos de tipo: <int, string>
 func (p *Parser) parseTypeArgumentsList() []Type {
@@ -91,6 +96,16 @@ func (p *Parser) parseTypeArgumentsList() []Type {
 		return nil
 	}
 
+	typeArgs := p.parseTypeArgumentListItems()
+	if !p.expectAndConsume(">") {
+		return nil
+	}
+
+	return typeArgs
+}
+
+// parseTypeArgumentListItems parseia itens da lista de argumentos de tipo
+func (p *Parser) parseTypeArgumentListItems() []Type {
 	typeArgs := make([]Type, 0, 2)
 
 	// Primeiro tipo
@@ -103,7 +118,7 @@ func (p *Parser) parseTypeArgumentsList() []Type {
 
 	// Tipos adicionais
 	for p.cur.Lexeme == "," {
-		p.advanceToken() // consume ","
+		p.advanceToken() // consome ","
 
 		typ = p.parseType()
 		if typ == nil {
@@ -113,21 +128,30 @@ func (p *Parser) parseTypeArgumentsList() []Type {
 		typeArgs = append(typeArgs, typ)
 	}
 
-	if !p.expectAndConsume(">") {
-		return nil
-	}
-
 	return typeArgs
 }
 
 // ============================
-// Funções Auxiliares
+// FUNÇÕES AUXILIARES
 // ============================
 
 // isValidGenericParam verifica se o token atual é um nome válido para parâmetro genérico
 func (p *Parser) isValidGenericParam() bool {
-	// Aceita identificadores, keywords que podem ser usados como generics, e tipos genéricos
-	return p.cur.Type == lexer.IDENT ||
-		p.cur.Type == lexer.GENERIC ||
-		(p.cur.Type == lexer.KEYWORD && len(p.cur.Lexeme) == 1 && p.cur.Lexeme[0] >= 'A' && p.cur.Lexeme[0] <= 'Z')
+	// Aceita identificadores
+	if p.cur.Type == lexer.IDENT {
+		return true
+	}
+
+	// Aceita tokens genéricos
+	if p.cur.Type == lexer.GENERIC {
+		return true
+	}
+
+	// Aceita keywords que são letras maiúsculas únicas (como T, U, V)
+	if p.cur.Type == lexer.KEYWORD {
+		lexeme := p.cur.Lexeme
+		return len(lexeme) == 1 && lexeme[0] >= 'A' && lexeme[0] <= 'Z'
+	}
+
+	return false
 }

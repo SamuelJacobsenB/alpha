@@ -1,11 +1,13 @@
 package parser
 
 import (
+	"strconv"
+
 	"github.com/alpha/internal/lexer"
 )
 
 // ============================
-// Constantes e Configurações
+// CONSTANTES E CONFIGURAÇÕES
 // ============================
 
 const (
@@ -53,30 +55,45 @@ var precedences = map[string]int{
 	"--": POSTFIX,
 }
 
-var infixOperators = map[string]bool{
-	"+": true, "-": true, "*": true, "/": true, "%": true,
-	">=": true, "<=": true, ">": true, "<": true,
-	"==": true, "!=": true, "&&": true, "||": true,
-	"=": true, "+=": true, "-=": true, "*=": true, "/=": true,
-}
+// Conjuntos de operadores para verificação rápida
+var (
+	infixOperators = map[string]bool{
+		"+": true, "-": true, "*": true, "/": true, "%": true,
+		">=": true, "<=": true, ">": true, "<": true,
+		"==": true, "!=": true, "&&": true, "||": true,
+		"=": true, "+=": true, "-=": true, "*=": true, "/=": true,
+	}
 
-var postfixOperators = map[string]bool{
-	"++": true,
-	"--": true,
-}
+	postfixOperators = map[string]bool{
+		"++": true,
+		"--": true,
+	}
+
+	prefixOperators = map[string]bool{
+		"-": true, "!": true, "+": true, "++": true, "--": true, "*": true, "&": true,
+	}
+)
 
 // ============================
-// Funções Auxiliares de Verificação
+// FUNÇÕES AUXILIARES DE VERIFICAÇÃO
 // ============================
 
+// isInfixOperator verifica se o token é um operador infixo
 func (p *Parser) isInfixOperator(token lexer.Token) bool {
 	return token.Type == lexer.OP && infixOperators[token.Lexeme]
 }
 
+// isPostfixOperator verifica se o token é um operador pós-fixo
 func (p *Parser) isPostfixOperator(token lexer.Token) bool {
 	return token.Type == lexer.OP && postfixOperators[token.Lexeme]
 }
 
+// isPrefixOperator verifica se o token é um operador pré-fixo
+func (p *Parser) isPrefixOperator(token lexer.Token) bool {
+	return token.Type == lexer.OP && prefixOperators[token.Lexeme]
+}
+
+// precedenceOf retorna a precedência de um operador
 func (p *Parser) precedenceOf(op string) int {
 	if prec, exists := precedences[op]; exists {
 		return prec
@@ -85,9 +102,10 @@ func (p *Parser) precedenceOf(op string) int {
 }
 
 // ============================
-// Parsing de Expressões (Principal)
+// PARSING DE EXPRESSÕES (PRINCIPAL)
 // ============================
 
+// parseExpression implementa o algoritmo de precedência de operadores (Pratt parsing)
 func (p *Parser) parseExpression(precedence int) Expr {
 	left := p.parsePrimary()
 	if left == nil {
@@ -97,9 +115,16 @@ func (p *Parser) parseExpression(precedence int) Expr {
 	for {
 		curOp := p.cur.Lexeme
 
+		// Isso permite que o parseTernary recupere o controle ao ver o delimitador
+		if curOp == ";" || curOp == ")" || curOp == "}" || curOp == "]" || curOp == "," || curOp == ":" || p.cur.Type == lexer.EOF {
+			return left
+		}
+
 		// Caso especial para operador ternário
 		if curOp == "?" {
-			if TERNARY < precedence {
+			// Se a precedência atual for maior ou igual ao Ternário,
+			// paramos aqui para que a instância superior do parser lide com ele.
+			if precedence >= TERNARY {
 				return left
 			}
 			left = p.parseTernary(left)
@@ -109,18 +134,12 @@ func (p *Parser) parseExpression(precedence int) Expr {
 			continue
 		}
 
-		// Se encontramos ":" fora de um ternário, paramos
-		if curOp == ":" {
+		// Verifica se é um operador válido para continuar
+		if !p.isValidContinuationOperator() {
 			return left
 		}
 
 		curPrec := p.precedenceOf(curOp)
-
-		// Verifica se é um operador infixo válido
-		if !p.isInfixOperator(p.cur) && !p.isPostfixOperator(p.cur) &&
-			curOp != "(" && curOp != "[" && curOp != "." {
-			return left
-		}
 
 		// Verifica precedência
 		if curPrec < precedence {
@@ -128,55 +147,56 @@ func (p *Parser) parseExpression(precedence int) Expr {
 		}
 
 		// Processa o operador atual
-		switch {
-		case curOp == "(":
-			left = p.parseCall(left)
-		case curOp == "[":
-			left = p.parseIndex(left)
-		case curOp == ".":
-			left = p.parseMemberAccess(left)
-		case p.isInfixOperator(p.cur):
-			left = p.parseInfix(left, curPrec)
-		case p.isPostfixOperator(p.cur):
-			left = p.parsePostfix(left)
-		default:
-			return left
-		}
-
+		left = p.processOperator(left, curOp, curPrec)
 		if left == nil {
 			return nil
 		}
 	}
 }
 
+// isValidContinuationOperator verifica se o token atual permite continuar a expressão
+func (p *Parser) isValidContinuationOperator() bool {
+	curOp := p.cur.Lexeme
+	return p.isInfixOperator(p.cur) || p.isPostfixOperator(p.cur) ||
+		curOp == "(" || curOp == "[" || curOp == "."
+}
+
+// processOperator processa o operador atual baseado em seu tipo
+func (p *Parser) processOperator(left Expr, curOp string, curPrec int) Expr {
+	switch {
+	case curOp == "(":
+		return p.parseCall(left)
+	case curOp == "[":
+		return p.parseIndex(left)
+	case curOp == ".":
+		return p.parseMemberAccess(left)
+	case p.isInfixOperator(p.cur):
+		return p.parseInfix(left, curPrec)
+	case p.isPostfixOperator(p.cur):
+		return p.parsePostfix(left)
+	default:
+		return left
+	}
+}
+
 // ============================
-// Parsing de Expressões Primárias
+// PARSING DE EXPRESSÕES PRIMÁRIAS
 // ============================
 
+// parsePrimary processa expressões primárias (literais, identificadores, etc.)
 func (p *Parser) parsePrimary() Expr {
 	switch p.cur.Type {
 	case lexer.IDENT:
-		// Tratamento explícito para Coleções (Set/Map)
-		if (p.cur.Lexeme == "set" || p.cur.Lexeme == "map") && (p.nxt.Lexeme == "<" || p.nxt.Lexeme == "{") {
-			return p.parseExplicitCollectionLiteral()
-		}
-
-		// Se temos um Identificador seguido de '{', é um literal de struct.
-		if p.nxt.Lexeme == "{" {
-			return p.parseTypedStructLiteral()
-		}
-
-		return p.parseIdentifier()
-	case lexer.INT, lexer.FLOAT:
-		return p.parseNumberToken(p.cur)
+		return p.parseIdentifierExpr()
+	case lexer.INT:
+		return p.parseIntLiteral()
+	case lexer.FLOAT:
+		return p.parseFloatLiteral()
 	case lexer.STRING:
 		return p.parseStringLiteral()
 	case lexer.KEYWORD:
 		return p.parseKeywordExpr()
 	case lexer.OP:
-		if p.cur.Lexeme == ":" {
-			return nil
-		}
 		return p.parseOperatorExpr()
 	default:
 		p.advanceToken()
@@ -184,18 +204,60 @@ func (p *Parser) parsePrimary() Expr {
 	}
 }
 
+// parseIdentifierExpr processa identificadores com casos especiais
+func (p *Parser) parseIdentifierExpr() Expr {
+	// Tratamento especial para coleções explícitas (set, map)
+	if (p.cur.Lexeme == "set" || p.cur.Lexeme == "map") && (p.nxt.Lexeme == "<" || p.nxt.Lexeme == "{") {
+		return p.parseExplicitCollectionLiteral()
+	}
+
+	// Struct literal tipado (ex: Point { ... })
+	if p.nxt.Lexeme == "{" {
+		return p.parseTypedStructLiteral()
+	}
+
+	return p.parseIdentifier()
+}
+
+// parseIdentifier cria um nó de identificador
 func (p *Parser) parseIdentifier() Expr {
 	ident := &Identifier{Name: p.cur.Lexeme}
 	p.advanceToken()
 	return ident
 }
 
+// parseIntLiteral processa literais inteiros
+func (p *Parser) parseIntLiteral() Expr {
+	value, err := strconv.ParseInt(p.cur.Lexeme, 10, 64)
+	if err != nil {
+		p.errorf("invalid integer literal: %s", p.cur.Lexeme)
+		return nil
+	}
+
+	p.advanceToken()
+	return &IntLiteral{Value: value}
+}
+
+// parseFloatLiteral processa literais de ponto flutuante
+func (p *Parser) parseFloatLiteral() Expr {
+	value, err := strconv.ParseFloat(p.cur.Lexeme, 64)
+	if err != nil {
+		p.errorf("invalid float literal: %s", p.cur.Lexeme)
+		return nil
+	}
+
+	p.advanceToken()
+	return &FloatLiteral{Value: value}
+}
+
+// parseStringLiteral processa literais de string
 func (p *Parser) parseStringLiteral() Expr {
 	str := &StringLiteral{Value: p.cur.Value}
 	p.advanceToken()
 	return str
 }
 
+// parseKeywordExpr processa expressões iniciadas por keywords
 func (p *Parser) parseKeywordExpr() Expr {
 	switch p.cur.Lexeme {
 	case "true", "false":
@@ -206,21 +268,9 @@ func (p *Parser) parseKeywordExpr() Expr {
 	case "self":
 		p.advanceToken()
 		return &SelfExpr{}
-	case "generic":
-		return p.parseGenericCallOrExpr()
-	case "set", "map":
-		return p.parseExplicitCollectionLiteral()
-	case "typeof":
-		// Trata typeof como expressão unária/função intrínseca
-		p.advanceToken()
-		if !p.expectAndConsume("(") {
-			return nil
-		}
-		expr := p.parseExpression(LOWEST)
-		if !p.expectAndConsume(")") {
-			return nil
-		}
-		return &UnaryExpr{Op: "typeof", Expr: expr}
+	case "lenght", "append", "remove", "removeIndex":
+		// Trata built-ins como identificadores especiais
+		return p.parseBuiltinCall()
 	default:
 		if isTypeKeyword(p.cur.Lexeme) {
 			return nil
@@ -230,12 +280,43 @@ func (p *Parser) parseKeywordExpr() Expr {
 	}
 }
 
+// parseBuiltinCall processa chamadas de funções built-in (len, append, delete)
+func (p *Parser) parseBuiltinCall() Expr {
+	// Salva o nome da built-in
+	builtinName := p.cur.Lexeme
+	p.advanceToken() // consome o nome da built-in
+
+	// Verifica se é uma chamada de função
+	if p.cur.Lexeme != "(" {
+		// Se não tem parênteses, retorna como identificador
+		return &Identifier{Name: builtinName}
+	}
+
+	// Parseia os argumentos
+	if !p.expectAndConsume("(") {
+		return nil
+	}
+
+	args := p.parseArgumentList()
+	if !p.expectAndConsume(")") {
+		return nil
+	}
+
+	// Cria um CallExpr especial (ou poderia ser um BuiltinCallExpr se quiser diferenciar)
+	return &CallExpr{
+		Callee: &Identifier{Name: builtinName},
+		Args:   args,
+	}
+}
+
+// parseBoolLiteral processa literais booleanos
 func (p *Parser) parseBoolLiteral() Expr {
 	val := p.cur.Lexeme == "true"
 	p.advanceToken()
 	return &BoolLiteral{Value: val}
 }
 
+// parseOperatorExpr processa expressões iniciadas por operadores
 func (p *Parser) parseOperatorExpr() Expr {
 	switch p.cur.Lexeme {
 	case "(":
@@ -246,18 +327,22 @@ func (p *Parser) parseOperatorExpr() Expr {
 		return p.parseBraceLiteral()
 	case "[":
 		return p.parseArrayLiteral()
-	case "-", "!", "+", "++", "--", "*":
-		return p.parsePrefixExpr()
+	case ":":
+		return nil
 	default:
+		if p.isPrefixOperator(p.cur) {
+			return p.parsePrefixExpr()
+		}
 		p.errorf("unexpected operator: %s", p.cur.Lexeme)
 		return nil
 	}
 }
 
 // ============================
-// Parsing de Operadores
+// PARSING DE OPERADORES
 // ============================
 
+// parsePrefixExpr processa operadores prefixos
 func (p *Parser) parsePrefixExpr() Expr {
 	op := p.cur.Lexeme
 	p.advanceToken()
@@ -270,6 +355,7 @@ func (p *Parser) parsePrefixExpr() Expr {
 	return &UnaryExpr{Op: op, Expr: expr, Postfix: false}
 }
 
+// parseInfix processa operadores infixos
 func (p *Parser) parseInfix(left Expr, precedence int) Expr {
 	op := p.cur.Lexeme
 	p.advanceToken()
@@ -286,26 +372,36 @@ func (p *Parser) parseInfix(left Expr, precedence int) Expr {
 	return &BinaryExpr{Left: left, Op: op, Right: right}
 }
 
+// parsePostfix processa operadores pós-fixos
 func (p *Parser) parsePostfix(left Expr) Expr {
 	op := p.cur.Lexeme
 	p.advanceToken()
 	return &UnaryExpr{Op: op, Expr: left, Postfix: true}
 }
 
+// parseTernary processa operador ternário (cond ? true : false)
 func (p *Parser) parseTernary(cond Expr) Expr {
 	p.advanceToken() // consume '?'
 
-	trueExpr := p.parseExpression(TERNARY + 1)
+	// Parse a expressão verdadeira
+	trueExpr := p.parseExpression(LOWEST)
 	if trueExpr == nil {
 		p.errorf("expected expression after '?'")
 		return nil
 	}
 
-	if !p.expectAndConsume(":") {
+	// CORREÇÃO: Verificar explicitamente se temos ':' antes de tentar consumir
+	if p.cur.Lexeme != ":" {
 		p.errorf("expected ':' in ternary expression, got '%s'", p.cur.Lexeme)
 		return nil
 	}
 
+	// Deve ter ':' após a expressão verdadeira
+	if !p.expectAndConsume(":") {
+		return nil
+	}
+
+	// Parse a expressão falsa com precedência TERNARY
 	falseExpr := p.parseExpression(TERNARY)
 	if falseExpr == nil {
 		p.errorf("expected expression after ':' in ternary")
@@ -320,34 +416,14 @@ func (p *Parser) parseTernary(cond Expr) Expr {
 }
 
 // ============================
-// Parsing de Chamadas e Acessos
+// PARSING DE CHAMADAS E ACESSOS
 // ============================
 
+// parseCall processa chamadas de função
 func (p *Parser) parseCall(left Expr) Expr {
 	// Trata GenericCallExpr sem argumentos
 	if gce, ok := left.(*GenericCallExpr); ok && gce.Args == nil {
-		if !p.expectAndConsume("(") {
-			p.errorf("expected '(' for function call")
-			return nil
-		}
-
-		var args []Expr
-		if p.cur.Lexeme != ")" {
-			args = p.parseArgumentList()
-			if args == nil {
-				return nil
-			}
-		}
-
-		if !p.expectAndConsume(")") {
-			return nil
-		}
-
-		return &GenericCallExpr{
-			Callee:   gce.Callee,
-			TypeArgs: gce.TypeArgs,
-			Args:     args,
-		}
+		return p.parseGenericFunctionCall(gce)
 	}
 
 	// Chamada normal
@@ -355,14 +431,7 @@ func (p *Parser) parseCall(left Expr) Expr {
 		return left
 	}
 
-	var args []Expr
-	if p.cur.Lexeme != ")" {
-		args = p.parseArgumentList()
-		if args == nil {
-			return nil
-		}
-	}
-
+	args := p.parseArgumentList()
 	if !p.expectAndConsume(")") {
 		return nil
 	}
@@ -373,7 +442,35 @@ func (p *Parser) parseCall(left Expr) Expr {
 	}
 }
 
+// parseGenericFunctionCall processa chamada de função genérica
+func (p *Parser) parseGenericFunctionCall(gce *GenericCallExpr) *GenericCallExpr {
+	if !p.expectAndConsume("(") {
+		return nil
+	}
+
+	var args []Expr
+	if p.cur.Lexeme != ")" {
+		args = p.parseArgumentList()
+	}
+
+	if !p.expectAndConsume(")") {
+		return nil
+	}
+
+	return &GenericCallExpr{
+		Callee:   gce.Callee,
+		TypeArgs: gce.TypeArgs,
+		Args:     args,
+	}
+}
+
+// parseArgumentList processa lista de argumentos
 func (p *Parser) parseArgumentList() []Expr {
+	// VERIFICAÇÃO ADICIONADA: lista de argumentos vazia
+	if p.cur.Lexeme == ")" {
+		return []Expr{} // Retorna lista vazia
+	}
+
 	args := make([]Expr, 0, 3)
 
 	for {
@@ -391,6 +488,7 @@ func (p *Parser) parseArgumentList() []Expr {
 	return args
 }
 
+// match verifica e consome um token se corresponder
 func (p *Parser) match(lexeme string) bool {
 	if p.cur.Lexeme == lexeme {
 		p.advanceToken()
@@ -399,6 +497,7 @@ func (p *Parser) match(lexeme string) bool {
 	return false
 }
 
+// parseIndex processa acesso por índice (array[expr])
 func (p *Parser) parseIndex(left Expr) Expr {
 	p.advanceToken()
 
@@ -414,6 +513,7 @@ func (p *Parser) parseIndex(left Expr) Expr {
 	return &IndexExpr{Array: left, Index: index}
 }
 
+// parseMemberAccess processa acesso a membro (object.member)
 func (p *Parser) parseMemberAccess(left Expr) Expr {
 	p.advanceToken() // consume '.'
 
@@ -429,58 +529,53 @@ func (p *Parser) parseMemberAccess(left Expr) Expr {
 }
 
 // ============================
-// Parsing de Literais
+// PARSING DE LITERAIS
 // ============================
 
+// parseBraceLiteral processa literais com chaves { ... }
 func (p *Parser) parseBraceLiteral() Expr {
 	p.advanceToken() // consume '{'
 
-	// Caso vazio: assume Set (ou Map vazio, dependendo da semântica, aqui SetLiteral)
+	// Caso vazio
 	if p.cur.Lexeme == "}" {
 		p.advanceToken()
 		return &SetLiteral{Elements: []Expr{}}
 	}
 
-	// Parseia o primeiro elemento/chave para decidir o tipo
+	// Parse primeiro elemento para determinar tipo
 	firstExpr := p.parseExpression(LOWEST)
 	if firstExpr == nil {
 		return nil
 	}
 
-	// Se o próximo token é ':', temos um Map ou Struct (Chave: Valor)
+	// Se tiver ':', é Map ou Struct
 	if p.cur.Lexeme == ":" {
-		p.advanceToken() // consome ':'
-
+		p.advanceToken()
 		firstValue := p.parseExpression(LOWEST)
 		if firstValue == nil {
 			return nil
 		}
 
-		// Decisão: Se a chave for um Identificador simples, tratamos como StructLiteral
-		// Caso contrário, tratamos como MapLiteral
+		// Struct se a chave for identificador simples
 		if ident, ok := firstExpr.(*Identifier); ok {
 			return p.continueStructLiteral(ident, firstValue)
 		}
 		return p.continueMapLiteral(firstExpr, firstValue)
 	}
 
-	// Se não for ':', é um Set (Lista de valores)
+	// Caso contrário, é Set
 	return p.continueSetLiteral(firstExpr)
 }
 
-// CORREÇÃO: Função dedicada para literais de struct com tipo explícito (ex: Point { ... })
+// parseTypedStructLiteral processa struct literais tipados (ex: Point { ... })
 func (p *Parser) parseTypedStructLiteral() Expr {
-	// O nome do tipo (IDENT) já foi verificado em parsePrimary
-	// A AST atual não possui campo 'Name' em StructLiteral, então apenas consumimos o token.
 	p.advanceToken() // consome o nome do tipo
-
-	// Delega para o parser de literais com chaves
 	return p.parseBraceLiteral()
 }
 
+// continueStructLiteral continua parsing de struct literal
 func (p *Parser) continueStructLiteral(firstKey *Identifier, firstValue Expr) Expr {
-	fields := make([]*StructField, 0, 3)
-	fields = append(fields, &StructField{Name: firstKey.Name, Value: firstValue})
+	fields := []*StructField{{Name: firstKey.Name, Value: firstValue}}
 
 	for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
 		if p.cur.Lexeme == "," {
@@ -494,6 +589,7 @@ func (p *Parser) continueStructLiteral(firstKey *Identifier, firstValue Expr) Ex
 			p.errorf("expected field name in struct literal, got %s", p.cur.Lexeme)
 			return nil
 		}
+
 		fieldName := p.cur.Lexeme
 		p.advanceToken()
 
@@ -505,6 +601,7 @@ func (p *Parser) continueStructLiteral(firstKey *Identifier, firstValue Expr) Ex
 		if val == nil {
 			return nil
 		}
+
 		fields = append(fields, &StructField{Name: fieldName, Value: val})
 	}
 
@@ -514,9 +611,9 @@ func (p *Parser) continueStructLiteral(firstKey *Identifier, firstValue Expr) Ex
 	return &StructLiteral{Fields: fields}
 }
 
+// continueMapLiteral continua parsing de map literal
 func (p *Parser) continueMapLiteral(firstKey, firstValue Expr) Expr {
-	entries := make([]*MapEntry, 0, 3)
-	entries = append(entries, &MapEntry{Key: firstKey, Value: firstValue})
+	entries := []*MapEntry{{Key: firstKey, Value: firstValue}}
 
 	for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
 		if p.cur.Lexeme == "," {
@@ -549,9 +646,9 @@ func (p *Parser) continueMapLiteral(firstKey, firstValue Expr) Expr {
 	return &MapLiteral{Entries: entries}
 }
 
+// continueSetLiteral continua parsing de set literal
 func (p *Parser) continueSetLiteral(firstElem Expr) Expr {
-	elements := make([]Expr, 0, 3)
-	elements = append(elements, firstElem)
+	elements := []Expr{firstElem}
 
 	for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
 		if p.cur.Lexeme == "," {
@@ -574,15 +671,14 @@ func (p *Parser) continueSetLiteral(firstElem Expr) Expr {
 	return &SetLiteral{Elements: elements}
 }
 
+// parseExplicitCollectionLiteral processa literais explícitos de coleção (set/map)
 func (p *Parser) parseExplicitCollectionLiteral() Expr {
 	typeName := p.cur.Lexeme
 	p.advanceToken() // consome 'map' ou 'set'
 
-	// Se houver parâmetros genéricos <...>, consuma-os
+	// Consome parâmetros genéricos se existirem
 	if p.cur.Lexeme == "<" {
-		if p.parseGenericType(typeName) == nil {
-			return nil
-		}
+		p.parseGenericType(typeName)
 	}
 
 	if p.cur.Lexeme != "{" {
@@ -596,6 +692,7 @@ func (p *Parser) parseExplicitCollectionLiteral() Expr {
 	return p.parseMapLiteral()
 }
 
+// parseParenthesizedExpr processa expressões entre parênteses
 func (p *Parser) parseParenthesizedExpr() Expr {
 	p.advanceToken()
 
@@ -611,6 +708,7 @@ func (p *Parser) parseParenthesizedExpr() Expr {
 	return expr
 }
 
+// parseReferenceExpr processa expressões de referência (&expr)
 func (p *Parser) parseReferenceExpr() Expr {
 	p.advanceToken()
 
@@ -622,6 +720,7 @@ func (p *Parser) parseReferenceExpr() Expr {
 	return &ReferenceExpr{Expr: expr}
 }
 
+// parseArrayLiteral processa literais de array
 func (p *Parser) parseArrayLiteral() Expr {
 	p.advanceToken()
 
@@ -633,6 +732,7 @@ func (p *Parser) parseArrayLiteral() Expr {
 	return &ArrayLiteral{Elements: elements}
 }
 
+// parseArrayElements processa elementos de array
 func (p *Parser) parseArrayElements() []Expr {
 	elements := make([]Expr, 0, 3)
 
@@ -654,43 +754,36 @@ func (p *Parser) parseArrayElements() []Expr {
 	return elements
 }
 
+// parseCollectionLiteral decide entre set e map literal (função de conveniência)
 func (p *Parser) parseCollectionLiteral() Expr {
-	// Salvar estado atual
 	savedCur, savedNxt := p.cur, p.nxt
 
-	p.advanceToken() // consume '{'
+	p.advanceToken()
 
-	// Se estiver vazio
 	if p.cur.Lexeme == "}" {
 		p.cur, p.nxt = savedCur, savedNxt
 		return p.parseSetLiteral()
 	}
 
-	tempParser := *p // Cópia rasa do parser
-
-	// Tentar parsear uma expressão
+	tempParser := *p
 	expr := tempParser.parseExpression(LOWEST)
 	if expr == nil {
-		// Se não conseguir parsear, restaurar e tentar como set
 		p.cur, p.nxt = savedCur, savedNxt
 		return p.parseSetLiteral()
 	}
 
-	// Verificar o token após a expressão
 	if tempParser.cur.Lexeme == ":" {
-		// É um map
 		p.cur, p.nxt = savedCur, savedNxt
 		return p.parseMapLiteral()
 	}
 
-	// Caso contrário, é um set
 	p.cur, p.nxt = savedCur, savedNxt
 	return p.parseSetLiteral()
 }
 
+// parseSetLiteral processa literais de set
 func (p *Parser) parseSetLiteral() Expr {
-	p.advanceToken() // consume '{'
-
+	p.advanceToken()
 	elements := make([]Expr, 0, 3)
 
 	for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
@@ -702,16 +795,11 @@ func (p *Parser) parseSetLiteral() Expr {
 
 		if p.cur.Lexeme == "," {
 			p.advanceToken()
-			// Permitir trailing comma
 			if p.cur.Lexeme == "}" {
 				break
 			}
 		} else if p.cur.Lexeme != "}" {
-			if p.cur.Type == lexer.EOF {
-				p.errorf("unexpected end of file in set literal")
-				return nil
-			}
-			p.errorf("expected ',' or '}' in set literal, got '%s'", p.cur.Lexeme)
+			p.handleSetLiteralError()
 			return nil
 		}
 	}
@@ -719,13 +807,21 @@ func (p *Parser) parseSetLiteral() Expr {
 	if !p.expectAndConsume("}") {
 		return nil
 	}
-
 	return &SetLiteral{Elements: elements}
 }
 
-func (p *Parser) parseMapLiteral() Expr {
-	p.advanceToken() // consume '{'
+// handleSetLiteralError lida com erros em set literals
+func (p *Parser) handleSetLiteralError() {
+	if p.cur.Type == lexer.EOF {
+		p.errorf("unexpected end of file in set literal")
+	} else {
+		p.errorf("expected ',' or '}' in set literal, got '%s'", p.cur.Lexeme)
+	}
+}
 
+// parseMapLiteral processa literais de map
+func (p *Parser) parseMapLiteral() Expr {
+	p.advanceToken()
 	entries := make([]*MapEntry, 0, 3)
 
 	for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
@@ -747,16 +843,11 @@ func (p *Parser) parseMapLiteral() Expr {
 
 		if p.cur.Lexeme == "," {
 			p.advanceToken()
-			// Permitir trailing comma
 			if p.cur.Lexeme == "}" {
 				break
 			}
 		} else if p.cur.Lexeme != "}" {
-			if p.cur.Type == lexer.EOF {
-				p.errorf("unexpected end of file in map literal")
-				return nil
-			}
-			p.errorf("expected ',' or '}' in map literal, got '%s'", p.cur.Lexeme)
+			p.handleMapLiteralError()
 			return nil
 		}
 	}
@@ -764,90 +855,92 @@ func (p *Parser) parseMapLiteral() Expr {
 	if !p.expectAndConsume("}") {
 		return nil
 	}
-
 	return &MapLiteral{Entries: entries}
 }
 
+// handleMapLiteralError lida com erros em map literals
+func (p *Parser) handleMapLiteralError() {
+	if p.cur.Type == lexer.EOF {
+		p.errorf("unexpected end of file in map literal")
+	} else {
+		p.errorf("expected ',' or '}' in map literal, got '%s'", p.cur.Lexeme)
+	}
+}
+
 // ============================
-// Parsing de Expressões Especiais
+// PARSING DE EXPRESSÕES ESPECIAIS
 // ============================
 
+// parseGenericCallOrExpr processa expressões genéricas
 func (p *Parser) parseGenericCallOrExpr() Expr {
-	p.advanceToken() // consume 'generic'
-
+	p.advanceToken()
 	typeArgs := p.parseTypeArgumentsList()
 	if typeArgs == nil {
 		return nil
 	}
 
-	// 1. Caso: Chamada de Função Genérica -> generic<T> funcName(...)
-	//    OU Literal de Struct Genérico -> generic<T> StructName { ... }
+	// Função ou struct genérica
 	if p.cur.Type == lexer.IDENT {
-		ident := &Identifier{Name: p.cur.Lexeme}
-
-		// Lookahead para diferenciar função de literal de struct
-		if p.nxt.Lexeme == "{" {
-			// É um Literal de Struct Genérico: generic<T> Car { ... }
-			// Consumimos o IDENT (nome da struct)
-			p.advanceToken()
-
-			// Parseamos o literal de chaves
-			lit := p.parseBraceLiteral()
-			if lit == nil {
-				return nil
-			}
-
-			// Retornamos uma especialização onde o Callee é o literal
-			// (Nota: Isso adapta o AST existente para suportar essa construção)
-			return &GenericSpecialization{
-				Callee:   lit,
-				TypeArgs: typeArgs,
-			}
-		}
-
-		// Caso contrário, assume-se função
-		p.advanceToken()
-
-		// Se tiver parênteses, é uma chamada de função
-		if p.cur.Lexeme == "(" {
-			p.advanceToken() // consume '('
-			var args []Expr
-			if p.cur.Lexeme != ")" {
-				args = p.parseArgumentList()
-			}
-
-			if !p.expectAndConsume(")") {
-				return nil
-			}
-
-			return &GenericCallExpr{
-				Callee:   ident,
-				TypeArgs: typeArgs,
-				Args:     args,
-			}
-		}
-
-		// Se não tem parênteses, é apenas uma referência especializada
-		return &GenericCallExpr{
-			Callee:   ident,
-			TypeArgs: typeArgs,
-			Args:     nil,
-		}
+		return p.parseGenericIdentExpr(typeArgs)
 	}
 
-	// 2. Caso: Literal de Array Genérico -> generic<T> [ ... ]
+	// Array genérico
 	if p.cur.Lexeme == "[" {
-		arrayLit := p.parseArrayLiteral()
-		if arrayLit == nil {
-			return nil
-		}
-
-		return &GenericSpecialization{
-			Callee:   arrayLit,
-			TypeArgs: typeArgs,
-		}
+		return p.parseGenericArrayExpr(typeArgs)
 	}
 
 	p.errorf("expected identifier or array literal after generic type arguments, got %s", p.cur.Lexeme)
 	return nil
+}
+
+// parseGenericIdentExpr processa identificadores genéricos
+func (p *Parser) parseGenericIdentExpr(typeArgs []Type) Expr {
+	ident := &Identifier{Name: p.cur.Lexeme}
+
+	// Struct literal genérico
+	if p.nxt.Lexeme == "{" {
+		p.advanceToken()
+		lit := p.parseBraceLiteral()
+		if lit == nil {
+			return nil
+		}
+		return &GenericSpecialization{Callee: lit, TypeArgs: typeArgs}
+	}
+
+	p.advanceToken()
+
+	// Chamada de função genérica
+	if p.cur.Lexeme == "(" {
+		p.advanceToken()
+		var args []Expr
+		if p.cur.Lexeme != ")" {
+			args = p.parseArgumentList()
+		}
+
+		if !p.expectAndConsume(")") {
+			return nil
+		}
+
+		return &GenericCallExpr{
+			Callee:   ident,
+			TypeArgs: typeArgs,
+			Args:     args,
+		}
+	}
+
+	// Referência especializada
+	return &GenericCallExpr{
+		Callee:   ident,
+		TypeArgs: typeArgs,
+		Args:     nil,
+	}
+}
+
+// parseGenericArrayExpr processa arrays genéricos
+func (p *Parser) parseGenericArrayExpr(typeArgs []Type) Expr {
+	arrayLit := p.parseArrayLiteral()
+	if arrayLit == nil {
+		return nil
+	}
+	return &GenericSpecialization{Callee: arrayLit, TypeArgs: typeArgs}
 }

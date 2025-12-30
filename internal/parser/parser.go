@@ -2,14 +2,13 @@ package parser
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/alpha/internal/lexer"
 )
 
 // ============================
-// Estrutura do Parser
+// ESTRUTURA DO PARSER
 // ============================
 
 // Parser representa o analisador sintático
@@ -21,7 +20,7 @@ type Parser struct {
 }
 
 // ============================
-// Inicialização e Configuração
+// INICIALIZAÇÃO E CONFIGURAÇÃO
 // ============================
 
 // New cria uma nova instância do parser
@@ -33,7 +32,7 @@ func New(sc *lexer.Scanner) *Parser {
 }
 
 // ============================
-// Funções de Avanço de Tokens
+// FUNÇÕES DE AVANÇO DE TOKENS
 // ============================
 
 // advanceToken avança para o próximo token
@@ -43,7 +42,7 @@ func (p *Parser) advanceToken() {
 }
 
 // ============================
-// Funções de Parsing Principal
+// FUNÇÕES DE PARSING PRINCIPAL
 // ============================
 
 // ParseProgram analisa um programa completo
@@ -59,8 +58,7 @@ func (p *Parser) ParseProgram() *Program {
 			if p.cur.Type == lexer.EOF {
 				break
 			}
-			// Tenta sincronizar avançando um token
-			p.advanceToken()
+			p.advanceToken() // Tenta sincronizar
 		}
 	}
 
@@ -68,27 +66,7 @@ func (p *Parser) ParseProgram() *Program {
 }
 
 // ============================
-// Funções de Parsing de Literais
-// ============================
-
-// parseNumberToken analisa um token numérico (inteiro ou float)
-func (p *Parser) parseNumberToken(tok lexer.Token) Expr {
-	var expr Expr
-
-	if tok.Type == lexer.INT {
-		val, _ := strconv.ParseInt(tok.Value, 10, 64)
-		expr = &IntLiteral{Value: val}
-	} else {
-		val, _ := strconv.ParseFloat(tok.Value, 64)
-		expr = &FloatLiteral{Value: val}
-	}
-
-	p.advanceToken()
-	return expr
-}
-
-// ============================
-// Funções de Verificação e Validação
+// FUNÇÕES DE VERIFICAÇÃO E VALIDAÇÃO
 // ============================
 
 // expectAndConsume verifica se o token atual é o esperado e consome
@@ -101,11 +79,6 @@ func (p *Parser) expectAndConsume(expected string) bool {
 	return false
 }
 
-// isAtEndOfStatement verifica se estamos no fim de um statement
-func (p *Parser) isAtEndOfStatement() bool {
-	return p.cur.Lexeme == ";" || p.cur.Lexeme == "}" || p.cur.Type == lexer.EOF
-}
-
 // isAtStmtStart verifica se estamos no início de um statement
 func (p *Parser) isAtStmtStart() bool {
 	return p.cur.Lexeme == ";" ||
@@ -116,7 +89,7 @@ func (p *Parser) isAtStmtStart() bool {
 }
 
 // ============================
-// Funções de Sincronização
+// FUNÇÕES DE SINCRONIZAÇÃO
 // ============================
 
 // syncToNextStmt sincroniza para o próximo statement após um erro
@@ -137,7 +110,7 @@ func (p *Parser) syncTo(token string) {
 }
 
 // ============================
-// Funções de Controle de Erros
+// FUNÇÕES DE CONTROLE DE ERROS
 // ============================
 
 // errorf adiciona um erro à lista de erros
@@ -156,7 +129,7 @@ func (p *Parser) ErrorsText() string {
 }
 
 // ============================
-// Funções Auxiliares
+// FUNÇÕES AUXILIARES
 // ============================
 
 // consumeOptionalSemicolon consome ponto-e-vírgula opcional
