@@ -13,18 +13,13 @@ var (
 		'|': true, ';': true, ',': true, '.': true,
 		':': true, '(': true, ')': true, '{': true,
 		'}': true, '[': true, ']': true, '<': true,
-		'>': true,
+		'>': true, '?': true,
 	}
 )
 
 func (s *Scanner) lexIdentifier() Token {
 	// Consome letras, dígitos e underscore
 	for !s.isEOF() && (isLetter(s.peek(0)) || isDigit(s.peek(0)) || s.peek(0) == '_') {
-		s.advance()
-	}
-
-	// Permite '?' apenas no final
-	if !s.isEOF() && s.peek(0) == '?' && s.index > s.start {
 		s.advance()
 	}
 

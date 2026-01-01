@@ -1,0 +1,33 @@
+package cond
+
+var a = 10
+int? b
+const c = true
+
+int sum
+
+if(b) {
+    sum++
+} else {
+    sum--
+}
+
+if(a) {
+    sum++
+} else if (!c) {
+    sum--
+} else {
+    sum -= 2
+}
+
+switch(sum) {
+    case 1:
+        sum++
+    case 2:
+        sum--
+    default:
+        sum = 0
+}
+
+// Ternary
+a = b == 10 ? 1000 : -1000

@@ -13,8 +13,8 @@ import (
 const (
 	_ int = iota
 	LOWEST
-	TERNARY
 	ASSIGNMENT
+	TERNARY
 	LOGICALOR
 	LOGICALAND
 	EQUALITY

@@ -1,64 +1,108 @@
 package semantic
 
-import "fmt"
+import (
+	"fmt"
 
-// Type representa um tipo na linguagem
-type Type interface {
-	String() string
-	Equals(Type) bool
-}
+	"github.com/alpha/internal/parser"
+)
 
-// Tipos primitivos concretos
-type IntType struct{}
-type FloatType struct{}
-type StringType struct{}
-type BoolType struct{}
-type NullType struct{}
-type AnyType struct{} // usado como fallback / dinâmico
-
-func (IntType) String() string    { return "int" }
-func (FloatType) String() string  { return "float" }
-func (StringType) String() string { return "string" }
-func (BoolType) String() string   { return "bool" }
-func (NullType) String() string   { return "null" }
-func (AnyType) String() string    { return "any" }
-
-func (IntType) Equals(t Type) bool    { _, ok := t.(IntType); return ok }
-func (FloatType) Equals(t Type) bool  { _, ok := t.(FloatType); return ok }
-func (StringType) Equals(t Type) bool { _, ok := t.(StringType); return ok }
-func (BoolType) Equals(t Type) bool   { _, ok := t.(BoolType); return ok }
-func (NullType) Equals(t Type) bool   { _, ok := t.(NullType); return ok }
-func (AnyType) Equals(t Type) bool    { _, ok := t.(AnyType); return ok }
-
-// FuncType representa tipo de função (simples)
-type FuncType struct {
-	Params []Type
-	Ret    Type
-}
-
-func (f FuncType) String() string {
-	ps := ""
-	for i, p := range f.Params {
-		if i > 0 {
-			ps += ", "
-		}
-		ps += p.String()
+// Helper para converter tipos primitivos em string para comparação rápida
+func getTypeName(t parser.Type) string {
+	if t == nil {
+		return "void"
+	} // Proteção contra nil
+	switch v := t.(type) {
+	case *parser.PrimitiveType:
+		return v.Name
+	case *parser.IdentifierType:
+		return v.Name
+	case *parser.ArrayType:
+		return getTypeName(v.ElementType) + "[]"
+	case *parser.NullableType:
+		return getTypeName(v.BaseType) + "?"
+	default:
+		return "unknown"
 	}
-	return fmt.Sprintf("fn(%s) -> %s", ps, f.Ret.String())
 }
 
-func (f FuncType) Equals(t Type) bool {
-	o, ok := t.(FuncType)
-	if !ok {
+// StringifyType converte qualquer nó de tipo em string legível
+func StringifyType(t parser.Type) string {
+	if t == nil {
+		return "void"
+	}
+	switch v := t.(type) {
+	case *parser.PrimitiveType:
+		return v.Name
+	case *parser.IdentifierType:
+		return v.Name
+	case *parser.ArrayType:
+		return StringifyType(v.ElementType) + "[]"
+	case *parser.PointerType:
+		return "*" + StringifyType(v.BaseType)
+	case *parser.NullableType:
+		return StringifyType(v.BaseType) + "?"
+	case *parser.MapType:
+		return fmt.Sprintf("map<%s, %s>", StringifyType(v.KeyType), StringifyType(v.ValueType))
+	default:
+		return "unknown"
+	}
+}
+
+func isConditionable(t parser.Type) bool {
+	tName := StringifyType(t)
+	// Aceita bool, int, float
+	if tName == "bool" || tName == "int" || tName == "float" {
+		return true
+	}
+	// Aceita Nullable (verifica se não é null)
+	if _, ok := t.(*parser.NullableType); ok {
+		return true
+	}
+	return false
+}
+
+// isNumeric: Helper reutilizado
+func isNumeric(t parser.Type) bool {
+	tBase := unwrapNullable(t)
+	name := StringifyType(tBase)
+	return name == "int" || name == "float"
+}
+
+// unwrapNullable: Remove o wrapper nullable se existir
+func unwrapNullable(t parser.Type) parser.Type {
+	if nt, ok := t.(*parser.NullableType); ok {
+		return nt.BaseType
+	}
+	return t
+}
+
+// AreTypesCompatible: Mantido igual, garantindo coerção de nullable e numérico
+func AreTypesCompatible(target, source parser.Type) bool {
+	if target == nil || source == nil {
 		return false
 	}
-	if len(o.Params) != len(f.Params) {
-		return false
+
+	tName := StringifyType(target)
+	sName := StringifyType(source)
+
+	if tName == "error" || sName == "error" {
+		return true
 	}
-	for i := range f.Params {
-		if !f.Params[i].Equals(o.Params[i]) {
-			return false
-		}
+	if tName == sName {
+		return true
 	}
-	return f.Ret.Equals(o.Ret)
+
+	tBase := unwrapNullable(target)
+	sBase := unwrapNullable(source)
+
+	if StringifyType(tBase) == StringifyType(sBase) {
+		return true
+	}
+
+	// Permite int -> float
+	if StringifyType(tBase) == "float" && StringifyType(sBase) == "int" {
+		return true
+	}
+
+	return false
 }

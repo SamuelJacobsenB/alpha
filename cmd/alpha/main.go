@@ -2,725 +2,468 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
+	"strings"
+	"time"
 
 	"github.com/alpha/internal/lexer"
 	"github.com/alpha/internal/parser"
+	"github.com/alpha/internal/semantic"
 )
 
-func testCase(name, src string) {
-	fmt.Printf("\n=== TEST: %s ===\n", name)
-	fmt.Println("Código:")
-	fmt.Println(src)
+// ==========================================
+// CONSTANTES PARA FORMATAÇÃO
+// ==========================================
 
-	sc := lexer.NewScanner(src)
-	p := parser.New(sc)
-	prog := p.ParseProgram()
+const (
+	ColorReset   = "\033[0m"
+	ColorRed     = "\033[31m"
+	ColorGreen   = "\033[32m"
+	ColorYellow  = "\033[33m"
+	ColorBlue    = "\033[34m"
+	ColorCyan    = "\033[36m"
+	ColorMagenta = "\033[35m"
+	ColorBold    = "\033[1m"
+	ColorGray    = "\033[90m"
+)
+
+// ==========================================
+// ESTRUTURAS DE ANÁLISE
+// ==========================================
+
+type AnalysisResult struct {
+	Success        bool
+	Message        string
+	TokenCount     int
+	Tokens         []lexer.Token
+	LexerErrors    []string
+	ParserErrors   []string
+	SemanticErrors []string
+	ASTStructure   string
+	Duration       time.Duration
+}
+
+// ==========================================
+// FUNÇÃO PRINCIPAL
+// ==========================================
+
+func main() {
+	fmt.Println(ColorBold + ColorCyan + "╔════════════════════════════════════════════════════╗")
+	fmt.Println("║     🧪 ANÁLISE DO ARQUIVO main.alpha     ║")
+	fmt.Println("╚════════════════════════════════════════════════════╝" + ColorReset)
+
+	// Ler o arquivo main.alpha
+	code, err := ioutil.ReadFile("main.alpha")
+	if err != nil {
+		fmt.Println(ColorRed + "❌ Erro ao ler o arquivo main.alpha:" + ColorReset)
+		fmt.Println(ColorRed + "   " + err.Error() + ColorReset)
+		return
+	}
+
+	codeStr := string(code)
+
+	fmt.Printf("\n%s📄 CONTEÚDO DO ARQUIVO:%s\n", ColorBold, ColorReset)
+	fmt.Println(ColorGray + strings.Repeat("─", 60) + ColorReset)
+	fmt.Println(codeStr)
+	fmt.Println(ColorGray + strings.Repeat("─", 60) + ColorReset)
+
+	// Executar análise completa
+	result := analyzeFile(codeStr)
+	printAnalysisResult(result)
+}
+
+// ==========================================
+// ANÁLISE COMPLETA
+// ==========================================
+
+func analyzeFile(code string) AnalysisResult {
+	startTime := time.Now()
+	result := AnalysisResult{}
+
+	fmt.Printf("\n%s🧪 ETAPA 1: ANÁLISE LÉXICA%s\n", ColorBold, ColorBlue)
+	fmt.Println(ColorGray + strings.Repeat("─", 60) + ColorReset)
+
+	// ========== ETAPA 1: LEXER ==========
+	fmt.Printf("%s[1/3] 🧪 Analisando tokens...%s", ColorBlue, ColorReset)
+	scanner := lexer.NewScanner(code)
+
+	tokens := []lexer.Token{}
+	lexerErrors := []string{}
+
+	for {
+		tok := scanner.NextToken()
+		tokens = append(tokens, tok)
+
+		if tok.Type == lexer.EOF {
+			break
+		}
+
+		if tok.Type == lexer.ERROR {
+			lexerErrors = append(lexerErrors,
+				fmt.Sprintf("Linha %d:%d - Token ilegal: %s",
+					tok.Line, tok.Col, tok.Lexeme))
+		}
+	}
+
+	result.TokenCount = len(tokens) - 1 // Excluir EOF
+	result.Tokens = tokens
+	result.LexerErrors = lexerErrors
+
+	if len(lexerErrors) > 0 {
+		fmt.Printf(" %s❌ (%d erros)%s\n", ColorRed, len(lexerErrors), ColorReset)
+	} else {
+		fmt.Printf(" %s✅ (%d tokens)%s\n", ColorGreen, result.TokenCount, ColorReset)
+	}
+
+	// Mostrar tokens detalhados
+	fmt.Printf("\n%s📋 TOKENS ENCONTRADOS:%s\n", ColorBold, ColorReset)
+	printTokens(tokens)
+
+	// Se houver erros léxicos, parar aqui
+	if len(lexerErrors) > 0 {
+		result.Success = false
+		result.Message = "Erros léxicos encontrados"
+		result.Duration = time.Since(startTime)
+		return result
+	}
+
+	// ========== ETAPA 2: PARSER ==========
+	fmt.Printf("\n%s🧪 ETAPA 2: ANÁLISE SINTÁTICA%s\n", ColorBold, ColorYellow)
+	fmt.Println(ColorGray + strings.Repeat("─", 60) + ColorReset)
+
+	fmt.Printf("%s[2/3] 📐 Analisando estrutura sintática...%s", ColorYellow, ColorReset)
+
+	// Criar novo scanner para o parser
+	scanner = lexer.NewScanner(code)
+	p := parser.New(scanner)
+	program := p.ParseProgram()
 
 	if p.HasErrors() {
-		fmt.Println("❌ Erros:")
-		fmt.Println(p.ErrorsText())
-	} else {
-		fmt.Println("✅ Parsing bem-sucedido!")
-		fmt.Printf("   Statements: %d\n", len(prog.Body))
+		result.ParserErrors = p.Errors
+		fmt.Printf(" %s❌ (%d erros)%s\n", ColorRed, len(p.Errors), ColorReset)
+
+		result.Success = false
+		result.Message = "Erros sintáticos encontrados"
+		result.Duration = time.Since(startTime)
+		return result
+	}
+
+	fmt.Printf(" %s✅%s\n", ColorGreen, ColorReset)
+
+	// Mostrar estrutura da AST
+	fmt.Printf("\n%s📊 ESTRUTURA DA AST:%s\n", ColorBold, ColorReset)
+	astStr := printASTStructure(program, 0)
+	result.ASTStructure = astStr
+
+	// ========== ETAPA 3: SEMANTIC ==========
+	fmt.Printf("\n%s🧪 ETAPA 3: ANÁLISE SEMÂNTICA%s\n", ColorBold, ColorMagenta)
+	fmt.Println(ColorGray + strings.Repeat("─", 60) + ColorReset)
+
+	fmt.Printf("%s[3/3] 🎯 Analisando semântica...%s", ColorMagenta, ColorReset)
+
+	checker := semantic.NewChecker()
+	checker.CheckProgram(program)
+
+	if len(checker.Errors) > 0 {
+		semanticErrorMsgs := make([]string, len(checker.Errors))
+		for i, err := range checker.Errors {
+			semanticErrorMsgs[i] = err.Error()
+		}
+		result.SemanticErrors = semanticErrorMsgs
+		fmt.Printf(" %s❌ (%d erros)%s\n", ColorRed, len(checker.Errors), ColorReset)
+
+		result.Success = false
+		result.Message = "Erros semânticos encontrados"
+		result.Duration = time.Since(startTime)
+		return result
+	}
+
+	fmt.Printf(" %s✅%s\n", ColorGreen, ColorReset)
+
+	result.Success = true
+	result.Message = "Análise completa bem-sucedida"
+	result.Duration = time.Since(startTime)
+
+	return result
+}
+
+// ==========================================
+// FUNÇÕES DE IMPRESSÃO
+// ==========================================
+
+func printTokens(tokens []lexer.Token) {
+	tokenTypeNames := map[lexer.TokenType]string{
+		lexer.EOF:     "EOF",
+		lexer.ERROR:   "ERROR",
+		lexer.KEYWORD: "KEYWORD",
+		lexer.IDENT:   "IDENT",
+		lexer.INT:     "INT",
+		lexer.FLOAT:   "FLOAT",
+		lexer.STRING:  "STRING",
+		lexer.OP:      "OP",
+		lexer.GENERIC: "GENERIC",
+	}
+
+	fmt.Printf("%-8s %-12s %-20s %s\n",
+		ColorBold+"Linha:Col"+ColorReset,
+		ColorBold+"Tipo"+ColorReset,
+		ColorBold+"Lexema"+ColorReset,
+		ColorBold+"Valor"+ColorReset)
+	fmt.Println(ColorGray + strings.Repeat("─", 80) + ColorReset)
+
+	for i, tok := range tokens {
+		if i >= 50 && i < len(tokens)-1 { // Limitar para não ficar muito grande
+			fmt.Printf("... e mais %d tokens\n", len(tokens)-i-1)
+			break
+		}
+
+		color := ColorReset
+		switch tok.Type {
+		case lexer.KEYWORD:
+			color = ColorBlue
+		case lexer.IDENT:
+			color = ColorCyan
+		case lexer.INT, lexer.FLOAT:
+			color = ColorYellow
+		case lexer.STRING:
+			color = ColorGreen
+		case lexer.OP:
+			color = ColorMagenta
+		case lexer.ERROR:
+			color = ColorRed
+		}
+
+		fmt.Printf("%-8s %-12s %-20s %s\n",
+			fmt.Sprintf("%d:%d", tok.Line, tok.Col),
+			color+tokenTypeNames[tok.Type]+ColorReset,
+			color+limitString(tok.Lexeme, 18)+ColorReset,
+			color+limitString(tok.Value, 30)+ColorReset)
 	}
 }
 
-func main() {
-	var caseName string
-	fmt.Print("Test Case: ")
-	fmt.Scan(&caseName)
-	fmt.Println("========================")
+func printASTStructure(node interface{}, indent int) string {
+	indentStr := strings.Repeat("  ", indent)
 
-	switch caseName {
-	case "variables":
-		testCase("Variáveis Simples", `
-        int num
-        int num1 = 10
-        var num2 = 20
-        const num3 = 30
-        `)
+	switch n := node.(type) {
+	case *parser.Program:
+		fmt.Printf("%s%sProgram%s\n", indentStr, ColorCyan, ColorReset)
+		for i, stmt := range n.Body {
+			fmt.Printf("%s  %s[%d]%s ", indentStr, ColorGray, i+1, ColorReset)
+			printASTStructure(stmt, indent+1)
+		}
+		return "Program"
 
-		testCase("Variáveis Nulas", `
-        int? num4 // null
-        int? num5 = 10
-        int? num6 = null
-        `)
+	case *parser.PackageDecl:
+		fmt.Printf("%s%sPackage: %s%s\n", indentStr, ColorGreen, n.Name, ColorReset)
+		return "PackageDecl"
 
-		testCase("Arrays", `
-        string[2] arr
-        string[2] arr2 = ["Hello", "World"]
-        var arr3 = ["Hello", "World"] // string[2] 
-        string[] linked
-
-        arr[0] = "Hello"
-        arr[1] = "World"
-
-        linked = ["Hello", "World"]
-        linked[0] = "Hello"
-        linked = append(linked, "!")
-        linked = remove(linked, "!")
-        linked = removeIndex(linked, 0)
-        `)
-
-		testCase("Matrixes", `
-        int[2][2] matrix
-        int[2][2] matrix2 = [
-            [1, 2],
-            [3, 4]
-        ]
-
-        matrix[0][0] = 1
-        matrix[0][1] = 2
-        matrix[1][0] = 3
-        matrix[1][1] = 4
-
-        matrix2[0][0] = 1
-        matrix2[0][1] = 2
-        matrix2[1][0] = 3
-        matrix2[1][1] = 4
-
-        var matrix3 = [
-            [1, 2],
-            [3, 4]
-        ]
-        int[][] matrix4
-        int[][] matrix5 = [
-            [1, 2],
-            [3, 4]
-        ]
-        `)
-
-		testCase("Ponteiros", `
-        int value = 42
-        int* ptr = &value
-        int** ptr2 = &ptr
-        var val = *ptr
-        `)
-
-		testCase("Maps", `
-        map<int, string> mapTest = map<int, string>{
-            1: "Hello",
-            2: "Bye",
-        }
-
-        var mapTest2 = map<int, string>{
-            1: "Hello",
-            2: "Bye",
-        }
-
-        map<int, string> mapTest3
-        `)
-
-		testCase("Union types", `
-        string | float types2 // ""
-        types2 = 3.1415
-
-        string | float | int types3 // ""
-        types3 = "Hello"
-        `)
-
-		// === NOVOS TESTES ===
-		testCase("Atribuição Composta e Expressões", `
-        int a = 10
-        a += 5
-        a -= 2
-        a *= 3
-        a /= 2
-        var b = (a + 10) * 2
-        `)
-
-		testCase("Concatenação de Strings", `
-        string firstName = "John"
-        string lastName = "Doe"
-        string fullName = firstName + " " + lastName
-        `)
-
-	case "conditions":
-		testCase("If-else simples", `
-            int x = 10
-            if(x > 5) {
-                x = 100
-            } else {
-                x = 0
-            }
-        `)
-
-		testCase("If-else if", `
-            int score = 85
-            if(score >= 90) {
-                string grade = "A"
-            } else if(score >= 80) {
-                string grade = "B"
-            } else if(score >= 70) {
-                string grade = "C"
-            } else {
-                string grade = "F"
-            }
-        `)
-
-		testCase("If sem chaves", `
-            int x = 5
-            if(x > 0)
-                x++
-            else
-                x--
-        `)
-
-		testCase("Switch statement", `
-            int day = 3
-            switch(day) {
-                case 1:
-                    string name = "Monday"
-                case 2:
-                    string name = "Tuesday"
-                case 3:
-                    string name = "Wednesday"
-                default:
-                    string name = "Unknown"
-            }
-        `)
-
-		testCase("Switch com múltiplos cases", `
-            int month = 2
-            int days = 0
-            switch(month) {
-                case 1: case 3: case 5: case 7:
-                case 8: case 10: case 12:
-                    days = 31
-                case 4: case 6: case 9: case 11:
-                    days = 30
-                case 2:
-                    days = 28
-                default:
-                    days = -1
-            }
-        `)
-
-		testCase("Operador ternário complexo", `
-            int a = 10
-            int b = 20
-            int max = a > b ? a : b
-            int min = a < b ? a : b
-            string result = a == b ? "equal" : "different"
-        `)
-
-		testCase("If Aninhado", `
-            int x = 10
-            int y = 20
-            if (x > 5) {
-                if (y > 15) {
-                    x = y
-                } else {
-                    x = 0
-                }
-            }
-        `)
-
-		testCase("Lógica Booleana Complexa", `
-            bool isActive = true
-            bool isAdmin = false
-            if ((isActive && !isAdmin) || (5 > 3)) {
-                print("Access allowed")
-            }
-        `)
-
-	case "loops":
-		testCase("For loop tradicional", `
-            for(int i = 0; i < 10; i++) {
-                int x = i * 2
-            }
-        `)
-
-		testCase("For-in loop", `
-            int[] numbers = [1, 2, 3, 4, 5]
-            for(num in numbers) {
-                int squared = num * num
-            }
-        `)
-
-		testCase("For-in loop com índice", `
-            string[] names = ["Alice", "Bob", "Charlie"]
-            for(i, name in names) {
-                string greeting = "Hello " + name
-            }
-        `)
-
-		testCase("While loop", `
-            int counter = 0
-            while(counter < 10) {
-                counter++
-            }
-        `)
-
-		testCase("Do-while loop", `
-            int x = 0
-            do {
-                x++
-            } while(x < 5)
-        `)
-
-		testCase("Loop com break e continue", `
-            int i = 0
-            while(true) {
-                if(i >= 10) {
-                    break
-                }
-                if(i % 2 == 0) {
-                    i++
-                    continue
-                }
-                i++
-            }
-        `)
-
-		// === NOVOS TESTES ===
-		testCase("Loops Aninhados", `
-            for(int i = 0; i < 5; i++) {
-                for(int j = 0; j < 5; j++) {
-                   int k = i * j
-                }
-            }
-        `)
-
-		testCase("For Loop Infinito (Sintaxe)", `
-            for(;;) {
-                break
-            }
-
-			while(true) {
-				break
+	case *parser.ImportDecl:
+		fmt.Printf("%s%sImport from: %s%s\n", indentStr, ColorGreen, n.Path, ColorReset)
+		if n.Imports != nil {
+			for _, imp := range n.Imports {
+				if imp.Alias != "" {
+					fmt.Printf("%s    %s as %s\n", indentStr, imp.Name, imp.Alias)
+				} else {
+					fmt.Printf("%s    %s\n", indentStr, imp.Name)
+				}
 			}
-        `)
+		}
+		return "ImportDecl"
 
-	case "functions":
-		testCase("Função simples", `
-            int function sum(int a, int b) {
-                return a + b
-            }
-            
-            int result = sum(5, 10)
-        `)
+	case *parser.VarDecl:
+		fmt.Printf("%s%sVar: %s%s\n", indentStr, ColorYellow, n.Name, ColorReset)
+		if n.Type != nil {
+			fmt.Printf("%s  Type: ", indentStr)
+			printASTStructure(n.Type, 0)
+		}
+		if n.Init != nil {
+			fmt.Printf("%s  Init: ", indentStr)
+			printASTStructure(n.Init, 0)
+		}
+		return "VarDecl"
 
-		testCase("Função sem retorno", `
-            void function printMessage(string msg) {
-                // imprime mensagem
-            }
-            
-            printMessage("Hello")
-        `)
-
-		testCase("Função com tipo genérico sem chamada", `
-            generic<T> T function identity(T value) {
-                return value
-            }
-        `)
-
-		testCase("Função com tipo genérico", `
-            generic<T> T function identity(T value) {
-                return value
-            }
-            
-            int num = generic<int> identity(5)
-            string text = generic<string> identity("test")
-        `)
-
-		testCase("Função com múltiplos parâmetros genéricos", `
-            generic<T, U> T function first(T a, U b) {
-                return a
-            }
-            
-            int result = generic<int, string> first(10, "hello")
-        `)
-
-		testCase("Função com array como parâmetro", `
-            int function sumArray(int[] numbers) {
-                int total = 0
-                for(n in numbers) {
-                    total += n
-                }
-                return total
-            }
-            
-            int[] nums = [1, 2, 3, 4, 5]
-            int total = sumArray(nums)
-        `)
-
-		// === NOVOS TESTES ===
-		testCase("Recursividade", `
-            int function factorial(int n) {
-                if (n <= 1) return 1
-                return n * factorial(n - 1)
-            }
-        `)
-
-		testCase("Retornando Struct/Objeto", `
-            struct Point {
-				int x
-				int y 
+	case *parser.FunctionDecl:
+		fmt.Printf("%s%sFunction: %s%s\n", indentStr, ColorBlue, n.Name, ColorReset)
+		fmt.Printf("%s  ReturnType: ", indentStr)
+		printASTStructure(n.ReturnType, 0)
+		if len(n.Params) > 0 {
+			fmt.Printf("%s  Params:\n", indentStr)
+			for _, param := range n.Params {
+				fmt.Printf("%s    %s: ", indentStr, param.Name)
+				printASTStructure(param.Type, 0)
 			}
-            
-            Point function createPoint(int a, int b) {
-                return Point { x: a, y: b }
-            }
-        `)
+		}
+		fmt.Printf("%s  Body (%d statements)\n", indentStr, len(n.Body))
+		return "FunctionDecl"
 
-	case "types":
-		testCase("Type alias simples", `
-            type Age int
-            Age myAge = 25
-        `)
+	case *parser.StructDecl:
+		fmt.Printf("%s%sStruct: %s%s\n", indentStr, ColorMagenta, n.Name, ColorReset)
+		if len(n.Fields) > 0 {
+			fmt.Printf("%s  Fields:\n", indentStr)
+			for _, field := range n.Fields {
+				visibility := "public"
+				if field.IsPrivate {
+					visibility = "private"
+				}
+				fmt.Printf("%s    %s %s: ", indentStr, visibility, field.Name)
+				printASTStructure(field.Type, 0)
+			}
+		}
+		return "StructDecl"
 
-		testCase("Union type", `
-            type Number int | float
-            Number num1 = 10
-            Number num2 = 3.14
-        `)
+	case *parser.IfStmt:
+		fmt.Printf("%s%sIf Statement%s\n", indentStr, ColorCyan, ColorReset)
+		fmt.Printf("%s  Condition: ", indentStr)
+		printASTStructure(n.Cond, 0)
+		fmt.Printf("%s  Then (%d statements)\n", indentStr, len(n.Then))
+		if len(n.Else) > 0 {
+			fmt.Printf("%s  Else (%d statements)\n", indentStr, len(n.Else))
+		}
+		return "IfStmt"
 
-		testCase("Nullable types", `
-            int? maybeNumber = null
-            string? maybeString = "hello"
-            float? maybeFloat = 3.14
-        `)
+	case *parser.WhileStmt:
+		fmt.Printf("%s%sWhile Loop%s\n", indentStr, ColorCyan, ColorReset)
+		fmt.Printf("%s  Condition: ", indentStr)
+		printASTStructure(n.Cond, 0)
+		fmt.Printf("%s  Body (%d statements)\n", indentStr, len(n.Body))
+		return "WhileStmt"
 
-		testCase("Pointer types", `
-            int value = 10
-            int* ptr = &value
-            int** ptrToPtr = &ptr
-        `)
+	case *parser.ForStmt:
+		fmt.Printf("%s%sFor Loop%s\n", indentStr, ColorCyan, ColorReset)
+		if n.Init != nil {
+			fmt.Printf("%s  Init: ", indentStr)
+			printASTStructure(n.Init, 0)
+		}
+		if n.Cond != nil {
+			fmt.Printf("%s  Condition: ", indentStr)
+			printASTStructure(n.Cond, 0)
+		}
+		if n.Post != nil {
+			fmt.Printf("%s  Post: ", indentStr)
+			printASTStructure(n.Post, 0)
+		}
+		fmt.Printf("%s  Body (%d statements)\n", indentStr, len(n.Body))
+		return "ForStmt"
 
-		testCase("Map types", `
-            map<string, int> scores = map<string, int>{
-                "Alice": 95,
-                "Bob": 87,
-                "Charlie": 92
-            }
+	case *parser.Identifier:
+		fmt.Printf("%s%sIdentifier: %s%s\n", indentStr, ColorGreen, n.Name, ColorReset)
+		return "Identifier"
 
-            var scores1 = map<string, int>{
-                "Alice": 95,
-                "Bob": 87,
-                "Charlie": 92
-            }
-        `)
+	case *parser.IntLiteral:
+		fmt.Printf("%s%sInt: %d%s\n", indentStr, ColorYellow, n.Value, ColorReset)
+		return "IntLiteral"
 
-		testCase("Set types", `
-            set<int> numbers = set<int>{1, 2, 3, 4, 5}
-            var names = set<string>{"Alice", "Bob"}
-        `)
+	case *parser.StringLiteral:
+		fmt.Printf("%s%sString: \"%s\"%s\n", indentStr, ColorGreen, n.Value, ColorReset)
+		return "StringLiteral"
 
-		testCase("Generics Aninhados (Nested)", `
-            map<string, set<int>> userGroups
-            list<map<string, string>> dataList
-        `)
+	case *parser.BinaryExpr:
+		fmt.Printf("%s%sBinary: %s%s\n", indentStr, ColorMagenta, n.Op, ColorReset)
+		fmt.Printf("%s  Left: ", indentStr)
+		printASTStructure(n.Left, 0)
+		fmt.Printf("%s  Right: ", indentStr)
+		printASTStructure(n.Right, 0)
+		return "BinaryExpr"
 
-	case "structs":
-		testCase("Struct Simples (Dados)", `
-            // simple definition
-            struct Message {
-                string text
-                string sender
-            }
+	case *parser.CallExpr:
+		fmt.Printf("%s%sFunction Call%s\n", indentStr, ColorBlue, ColorReset)
+		fmt.Printf("%s  Callee: ", indentStr)
+		printASTStructure(n.Callee, 0)
+		fmt.Printf("%s  Args (%d):\n", indentStr, len(n.Args))
+		for i, arg := range n.Args {
+			fmt.Printf("%s    [%d] ", indentStr, i+1)
+			printASTStructure(arg, 0)
+		}
+		return "CallExpr"
 
-            // instantiation
-            Message message = Message {
-                text: "This is a message",
-                sender: "Samuel",
-            }
-        `)
+	case *parser.PrimitiveType:
+		fmt.Printf("%s%sType: %s%s\n", indentStr, ColorCyan, n.Name, ColorReset)
+		return "PrimitiveType"
 
-		testCase("Struct Genérico", `
-            generic<T> struct Car {
-                T motor
-                int year
-            }
+	case *parser.ArrayType:
+		fmt.Printf("%s%sArray Type%s\n", indentStr, ColorCyan, ColorReset)
+		fmt.Printf("%s  Element: ", indentStr)
+		printASTStructure(n.ElementType, 0)
+		if n.Size != nil {
+			fmt.Printf("%s  Size: ", indentStr)
+			printASTStructure(n.Size, 0)
+		}
+		return "ArrayType"
 
-            // instantiation with generic type
-            Car car = generic<string> Car {
-                motor: "654MT4",
-                year: 2001,
-            }
-        `)
-
-		testCase("Struct com Private", `
-            struct Man {
-                int age
-                private string cpf
-            }
-
-            var man = Man {
-                age: 24
-            }
-        `)
-
-		testCase("Struct Implementation (init & self)", `
-            struct User {
-                string email
-                private string password
-                public int age
-            }
-
-            implement User {
-                init(string email, string password, int age) {
-                    self.email = email
-                    self.password = password
-                    self.age = age
-                }
-
-                generic<T> bool validatePassword() {
-                    return typeof(password) == T
-                } 
-            }
-
-            var user = User { email: "email@email.com", password: "Senha12345", age: 20 }
-        `)
-
-		testCase("Composição de Structs (Aninhadas)", `
-            struct Address {
-                string street
-                string city
-            }
-            
-            struct Person {
-                string name
-                Address addr
-            }
-            
-            var p = Person {
-                name: "John",
-                addr: Address {
-                    street: "Main St",
-                    city: "NY",
-                },
-            }
-        `)
-
-		testCase("Struct com Array", `
-            struct Group {
-                string name
-                string[] members
-            }
-            
-            var g = Group {
-                name: "Admins",
-                members: ["Alice", "Bob"],
-            }
-        `)
-
-	case "expressions":
-		testCase("Precedência Matemática", `
-            int x = 10 + 5 * 2
-            int y = (10 + 5) * 2
-            int z = 100 / 10 * 2 // deve ser 20, esquerda para direita
-        `)
-
-		testCase("Operadores Unários e Lógicos", `
-            bool check = !true
-            int i = 10
-            i++
-            int j = --i
-            bool res = (i > 5) && (j < 20)
-        `)
-
-	case "packages":
-		testCase("Criando pacotes", `
-        package math
-        int a = 25
-        export a
-    `)
-
-		testCase("Múltiplas exportações em pacote", `
-        package utils
-        int version = 1
-        string app_name = "AlphaApp"
-        bool debug = false
-        
-        export version
-        export app_name
-        export debug
-    `)
-
-		testCase("Exportação de funções", `
-        package calculator
-        int function add(int a, int b) {
-            return a + b
-        }
-        
-        int function multiply(int a, int b) {
-            return a * b
-        }
-        
-        export add
-        export multiply
-    `)
-
-		testCase("Exportação de tipos complexos", `
-        package geometry
-        struct Point {
-            float x
-            float y
-        }
-        
-        struct Circle {
-            Point center
-            float radius
-        }
-        
-        export Point
-        export Circle
-    `)
-
-		testCase("Constantes em pacote", `
-        package constants
-        const MAX_SIZE = 100
-        const PI = 3.14159
-        const GREETING = "Hello"
-        
-        export MAX_SIZE
-        export PI
-        export GREETING
-    `)
-
-		testCase("Pacote com dependências", `
-        package advanced_math
-        import math.PI
-        
-        float function calculate_circle_area(float radius) {
-            return PI * radius * radius
-        }
-        
-        export calculate_circle_area
-    `)
-
-		testCase("Pacote com dependências 2", `
-        package advanced_math
-        import math
-        
-        float function calculate_circle_area(float radius) {
-            return math.PI * radius * radius
-        }
-        
-        export calculate_circle_area
-    `)
-
-		testCase("Pacote com alias", `
-        package advanced_math
-        import PI, sqrt as sq from math
-        
-        float function calculate_circle_area(float radius) {
-            return PI * sq(radius)
-        }
-        
-        export calculate_circle_area
-    `)
-
-		testCase("Pacotes aninhados", `
-        package company.utils
-        string function format_name(string first, string last) {
-            return first + " " + last
-        }
-        
-        export format_name
-    `)
-
-		testCase("Variáveis privadas em pacote", `
-        package config
-        string api_key = "secret123"  // privada
-        string api_url = "https://api.example.com"
-        
-        // Só exporta a URL
-        export api_url
-    `)
-
-		testCase("Exportação com alias", `
-        package external
-        string function very_long_function_name() {
-            return "result"
-        }
-        
-        export very_long_function_name as short_name
-    `)
-
-		testCase("Interface exportada", `
-        package shapes
-        
-        struct Rectangle {
-            float width
-            float height
-        }
-        
-        export Rectangle
-    `)
-
-		testCase("Reexportação de pacote", `
-        package extended_math
-        
-        // Reexporta PI com outro nome
-        const PI = 3.14
-        export PI
-        
-        // Adiciona funções próprias
-        float function square(float x) {
-            return x * x
-        }
-        export square
-    `)
-
-		testCase("Declaração de versão de pacote", `
-        package database.v2
-        string function connect(string url) {
-            return "Connected to " + url
-        }
-        
-        export connect
-    `)
-
-		testCase("Escopo de variáveis de pacote", `
-        package counter
-        int count = 0
-        
-        int function increment() {
-            count += 1
-            return count
-        }
-        
-        void function reset() {
-            count = 0
-        }
-        
-        export increment, reset, count
-    `)
-
-		testCase("Pacote com documentação", `
-        package strings
-        
-        // Concatena duas strings
-        string function concat(string a, string b) {
-            return a + b
-        }
-        
-        export concat
-    `)
-
-		testCase("Pacotes aninhados", `
-        package base
-        string function greet() {
-            return "Hello"
-        }
-        export greet
-        
-        string function formal_greet() {
-            return greet() + ", Sir"
-        }
-        export formal_greet
-    `)
-
-		testCase("Pacote vazio", `
-        package placeholder
-        // Nada para exportar ainda
-    `)
+	case *parser.MapType:
+		fmt.Printf("%s%sMap Type%s\n", indentStr, ColorCyan, ColorReset)
+		fmt.Printf("%s  Key: ", indentStr)
+		printASTStructure(n.KeyType, 0)
+		fmt.Printf("%s  Value: ", indentStr)
+		printASTStructure(n.ValueType, 0)
+		return "MapType"
 
 	default:
-		panic("Give a correct case name")
+		typeName := fmt.Sprintf("%T", n)
+		simpleName := strings.TrimPrefix(typeName, "*parser.")
+		fmt.Printf("%s%s%s%s\n", indentStr, ColorGray, simpleName, ColorReset)
+		return simpleName
+	}
+}
+
+func printAnalysisResult(result AnalysisResult) {
+	fmt.Println("\n" + ColorBold + ColorCyan + "╔════════════════════════════════════════════════════╗")
+	fmt.Println("║                 📊 RESUMO DA ANÁLISE               ║")
+	fmt.Println("╚════════════════════════════════════════════════════╝" + ColorReset)
+
+	fmt.Printf("\n%sESTATÍSTICAS:%s\n", ColorBold, ColorReset)
+	fmt.Printf("   Status:           %s%s%s\n",
+		colorIf(result.Success, ColorGreen, ColorRed),
+		result.Message,
+		ColorReset)
+	fmt.Printf("   Tokens:           %s%d%s\n", ColorBold, result.TokenCount, ColorReset)
+	fmt.Printf("   Tempo Total:      %s%.2f segundos%s\n", ColorBold, result.Duration.Seconds(), ColorReset)
+
+	// Mostrar erros por etapa
+	if len(result.LexerErrors) > 0 {
+		fmt.Printf("\n%sERROS LÉXICOS (%d):%s\n", ColorRed, len(result.LexerErrors), ColorReset)
+		for i, err := range result.LexerErrors {
+			fmt.Printf("   %d. %s\n", i+1, err)
+		}
 	}
 
-	fmt.Println("\n=== TODOS OS TESTES CONCLUÍDOS ===")
+	if len(result.ParserErrors) > 0 {
+		fmt.Printf("\n%sERROS SINTÁTICOS (%d):%s\n", ColorRed, len(result.ParserErrors), ColorReset)
+		for i, err := range result.ParserErrors {
+			fmt.Printf("   %d. %s\n", i+1, err)
+		}
+	}
+
+	if len(result.SemanticErrors) > 0 {
+		fmt.Printf("\n%sERROS SEMÂNTICOS (%d):%s\n", ColorRed, len(result.SemanticErrors), ColorReset)
+		for i, err := range result.SemanticErrors {
+			fmt.Printf("   %d. %s\n", i+1, err)
+		}
+	}
+
+	// Mensagem final
+	fmt.Print("\n" + ColorBold)
+	if result.Success {
+		fmt.Println(ColorGreen + "✨ ANÁLISE COMPLETA BEM-SUCEDIDA! ✨" + ColorReset)
+	} else {
+		fmt.Println(ColorRed + "⚠️  ANÁLISE ENCONTROU ERROS" + ColorReset)
+	}
+}
+
+// ==========================================
+// FUNÇÕES AUXILIARES
+// ==========================================
+
+func limitString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
+}
+
+func colorIf(condition bool, trueColor, falseColor string) string {
+	if condition {
+		return trueColor
+	}
+	return falseColor
 }
