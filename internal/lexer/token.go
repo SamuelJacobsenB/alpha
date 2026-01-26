@@ -29,8 +29,7 @@ var keywords = map[string]struct{}{
 
 	// Declarações
 	"var": {}, "const": {}, "function": {}, "type": {}, "enum": {},
-	"struct": {}, // Mantido struct
-
+	"struct": {},
 	// Controle de fluxo
 	"if": {}, "else": {}, "while": {}, "do": {}, "for": {}, "in": {}, "return": {},
 	"break": {}, "continue": {}, "switch": {}, "case": {}, "default": {},
@@ -46,4 +45,5 @@ var keywords = map[string]struct{}{
 
 	// Utilitários
 	"generic": {}, "length": {}, "append": {}, "remove": {}, "removeIndex": {},
+	"delete": {}, "add": {}, "clear": {},
 }

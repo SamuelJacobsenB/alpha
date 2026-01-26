@@ -53,6 +53,8 @@ var precedences = map[string]int{
 	"[":  INDEX,
 	"++": POSTFIX,
 	"--": POSTFIX,
+	"&":  PREFIX,
+	"|":  LOWEST,
 }
 
 // Conjuntos de operadores para verificação rápida
@@ -268,11 +270,16 @@ func (p *Parser) parseKeywordExpr() Expr {
 	case "self":
 		p.advanceToken()
 		return &SelfExpr{}
-	case "lenght", "append", "remove", "removeIndex":
-		// Trata built-ins como identificadores especiais
+	case "length", "append", "remove", "removeIndex", "delete", "add", "clear":
 		return p.parseBuiltinCall()
+	case "generic":
+		return p.parseGenericCallOrExpr()
 	default:
 		if isTypeKeyword(p.cur.Lexeme) {
+			if p.nxt.Lexeme == "(" {
+				return p.parseTypeCast()
+			}
+			// Se for apenas o tipo solto sem '(', não é uma expressão válida
 			return nil
 		}
 		p.errorf("unexpected keyword: %s", p.cur.Lexeme)
@@ -329,6 +336,13 @@ func (p *Parser) parseOperatorExpr() Expr {
 		return p.parseArrayLiteral()
 	case ":":
 		return nil
+	case ".":
+		// Se o próximo token for ".", ".." ele vai para o spread "..."
+		if p.nxt.Lexeme == "." {
+			return p.parseSpreadExpr()
+		}
+		// Se não for spread, cai no default (erro ou member access inválido aqui)
+		fallthrough
 	default:
 		if p.isPrefixOperator(p.cur) {
 			return p.parsePrefixExpr()
@@ -336,6 +350,19 @@ func (p *Parser) parseOperatorExpr() Expr {
 		p.errorf("unexpected operator: %s", p.cur.Lexeme)
 		return nil
 	}
+}
+
+func (p *Parser) parseSpreadExpr() Expr {
+	// Consome os 3 pontos
+	p.advanceToken()
+	p.advanceToken()
+	p.advanceToken()
+
+	expr := p.parseExpression(LOWEST)
+	if expr == nil {
+		return nil
+	}
+	return &SpreadExpr{Expr: expr}
 }
 
 // ============================
@@ -569,8 +596,16 @@ func (p *Parser) parseBraceLiteral() Expr {
 
 // parseTypedStructLiteral processa struct literais tipados (ex: Point { ... })
 func (p *Parser) parseTypedStructLiteral() Expr {
-	p.advanceToken() // consome o nome do tipo
-	return p.parseBraceLiteral()
+	name := p.cur.Lexeme // Captura o nome antes de avançar
+	p.advanceToken()     // consome o nome do tipo
+
+	expr := p.parseBraceLiteral()
+
+	// Se for um StructLiteral, injeta o nome capturado
+	if lit, ok := expr.(*StructLiteral); ok {
+		lit.Name = name
+	}
+	return expr
 }
 
 // continueStructLiteral continua parsing de struct literal
@@ -754,33 +789,6 @@ func (p *Parser) parseArrayElements() []Expr {
 	return elements
 }
 
-// parseCollectionLiteral decide entre set e map literal (função de conveniência)
-func (p *Parser) parseCollectionLiteral() Expr {
-	savedCur, savedNxt := p.cur, p.nxt
-
-	p.advanceToken()
-
-	if p.cur.Lexeme == "}" {
-		p.cur, p.nxt = savedCur, savedNxt
-		return p.parseSetLiteral()
-	}
-
-	tempParser := *p
-	expr := tempParser.parseExpression(LOWEST)
-	if expr == nil {
-		p.cur, p.nxt = savedCur, savedNxt
-		return p.parseSetLiteral()
-	}
-
-	if tempParser.cur.Lexeme == ":" {
-		p.cur, p.nxt = savedCur, savedNxt
-		return p.parseMapLiteral()
-	}
-
-	p.cur, p.nxt = savedCur, savedNxt
-	return p.parseSetLiteral()
-}
-
 // parseSetLiteral processa literais de set
 func (p *Parser) parseSetLiteral() Expr {
 	p.advanceToken()
@@ -895,7 +903,8 @@ func (p *Parser) parseGenericCallOrExpr() Expr {
 
 // parseGenericIdentExpr processa identificadores genéricos
 func (p *Parser) parseGenericIdentExpr(typeArgs []Type) Expr {
-	ident := &Identifier{Name: p.cur.Lexeme}
+	name := p.cur.Lexeme // Captura o nome
+	ident := &Identifier{Name: name}
 
 	// Struct literal genérico
 	if p.nxt.Lexeme == "{" {
@@ -903,6 +912,10 @@ func (p *Parser) parseGenericIdentExpr(typeArgs []Type) Expr {
 		lit := p.parseBraceLiteral()
 		if lit == nil {
 			return nil
+		}
+		// Injeta o nome no literal
+		if sl, ok := lit.(*StructLiteral); ok {
+			sl.Name = name
 		}
 		return &GenericSpecialization{Callee: lit, TypeArgs: typeArgs}
 	}
@@ -943,4 +956,34 @@ func (p *Parser) parseGenericArrayExpr(typeArgs []Type) Expr {
 		return nil
 	}
 	return &GenericSpecialization{Callee: arrayLit, TypeArgs: typeArgs}
+}
+
+// parseTypeCast processa conversões de tipo primitivo: int(x), string(y)
+func (p *Parser) parseTypeCast() Expr {
+	// 1. Captura o nome do tipo (já sabemos que é uma keyword válida)
+	typeName := p.cur.Lexeme
+	p.advanceToken() // consome 'int', 'float', etc.
+
+	// 2. Consome o parêntese de abertura
+	if !p.expectAndConsume("(") {
+		return nil
+	}
+
+	// 3. Parseia a expressão interna
+	expr := p.parseExpression(LOWEST)
+	if expr == nil {
+		p.errorf("expected expression inside type cast")
+		return nil
+	}
+
+	// 4. Consome o parêntese de fechamento
+	if !p.expectAndConsume(")") {
+		return nil
+	}
+
+	// 5. Retorna o nó de Cast
+	return &TypeCastExpr{
+		Type: &PrimitiveType{Name: typeName},
+		Expr: expr,
+	}
 }

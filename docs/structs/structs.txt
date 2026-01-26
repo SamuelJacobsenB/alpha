@@ -44,7 +44,7 @@ implement User {
     }
 
     generic<T> bool validatePassword() {
-        return typeof(password) == T
+        return true
     } 
 }
 

@@ -8,42 +8,34 @@ import (
 // DECLARAÇÕES DE VARIÁVEIS E CONSTANTES
 // ============================
 
-// parseTypedVarDecl processa declarações de variáveis com tipo explícito (usado internamente)
-func (p *Parser) parseTypedVarDecl() Stmt {
-	typ := p.parseType()
-	if typ == nil || p.cur.Type != lexer.IDENT {
-		return nil
-	}
-
-	name := p.cur.Lexeme
-	p.advanceToken()
-
-	var init Expr
-	if p.cur.Lexeme == "=" {
-		p.advanceToken()
-		init = p.parseExpression(LOWEST)
-		if init == nil {
-			p.errorf("expected expression after '='")
-			return nil
-		}
-	}
-
-	return &VarDecl{Name: name, Type: typ, Init: init}
-}
-
-// parseVarDecl processa declarações 'var'
+// parseVarDecl processa declarações 'var' (simples ou múltiplas)
 func (p *Parser) parseVarDecl() Stmt {
 	p.advanceToken() // consome 'var'
 
+	// Parse uma lista de identificadores
+	var names []string
 	if p.cur.Type != lexer.IDENT {
 		p.errorf("expected identifier after 'var'")
 		p.syncTo(";")
 		return nil
 	}
-
-	name := p.cur.Lexeme
+	names = append(names, p.cur.Lexeme)
 	p.advanceToken()
 
+	// Parse identificadores adicionais separados por vírgula
+	for p.cur.Lexeme == "," {
+		p.advanceToken() // consome ','
+
+		if p.cur.Type != lexer.IDENT {
+			p.errorf("expected identifier after ',' in variable declaration")
+			p.syncTo(";")
+			return nil
+		}
+		names = append(names, p.cur.Lexeme)
+		p.advanceToken()
+	}
+
+	// Tipo opcional (após ':')
 	var typ Type
 	if p.cur.Lexeme == ":" {
 		p.advanceToken()
@@ -54,23 +46,62 @@ func (p *Parser) parseVarDecl() Stmt {
 		}
 	}
 
-	init := p.parseOptionalInitializer()
-	return &VarDecl{Name: name, Type: typ, Init: init}
+	// Inicializador obrigatório
+	var init Expr
+	if p.cur.Lexeme == "=" {
+		p.advanceToken()
+		init = p.parseExpression(LOWEST)
+		if init == nil {
+			p.errorf("expected expression after '=' in variable declaration")
+			p.syncTo(";")
+			return nil
+		}
+	} else {
+		// Para múltiplas variáveis, o inicializador é obrigatório
+		if len(names) > 1 {
+			p.errorf("multiple variables declaration must have initializer")
+			p.syncTo(";")
+			return nil
+		}
+		// Para variável única, o inicializador é opcional
+	}
+
+	// Retorna declaração apropriada
+	if len(names) == 1 {
+		return &VarDecl{Name: names[0], Type: typ, Init: init}
+	} else {
+		return &MultiVarDecl{Names: names, Type: typ, Init: init}
+	}
 }
 
-// parseConstDecl processa declarações 'const'
+// parseConstDecl processa declarações 'const' (simples ou múltiplas)
 func (p *Parser) parseConstDecl() Stmt {
 	p.advanceToken() // consome 'const'
 
+	// Parse uma lista de identificadores
+	var names []string
 	if p.cur.Type != lexer.IDENT {
 		p.errorf("expected identifier after 'const'")
 		p.syncTo(";")
 		return nil
 	}
-
-	name := p.cur.Lexeme
+	names = append(names, p.cur.Lexeme)
 	p.advanceToken()
 
+	// Parse identificadores adicionais separados por vírgula
+	for p.cur.Lexeme == "," {
+		p.advanceToken() // consome ','
+
+		if p.cur.Type != lexer.IDENT {
+			p.errorf("expected identifier after ',' in constant declaration")
+			p.syncTo(";")
+			return nil
+		}
+		names = append(names, p.cur.Lexeme)
+		p.advanceToken()
+	}
+
+	// Inicializador obrigatório
 	if p.cur.Lexeme != "=" {
 		p.errorf("expected '=' in const declaration")
 		p.syncTo(";")
@@ -85,27 +116,50 @@ func (p *Parser) parseConstDecl() Stmt {
 		return nil
 	}
 
-	return &ConstDecl{Name: name, Init: init}
+	// Retorna declaração apropriada
+	if len(names) == 1 {
+		return &ConstDecl{Name: names[0], Init: init}
+	} else {
+		return &MultiConstDecl{Names: names, Init: init}
+	}
 }
 
-// parseOptionalInitializer processa inicializador opcional após '='
-func (p *Parser) parseOptionalInitializer() Expr {
-	if p.cur.Lexeme != "=" {
+// parseTypedVarDecl processa declarações de variáveis com tipo explícito (apenas simples)
+func (p *Parser) parseTypedVarDecl() Stmt {
+	// Salva estado para backtracking se falhar
+	savedCur, savedNxt := p.cur, p.nxt
+
+	typ := p.parseType()
+	if typ == nil {
 		return nil
 	}
+
+	// Parse uma lista de identificadores (apenas um para typed declaration)
+	var names []string
+	if p.cur.Type != lexer.IDENT {
+		p.cur, p.nxt = savedCur, savedNxt // Restaura
+		return nil
+	}
+	names = append(names, p.cur.Lexeme)
 	p.advanceToken()
 
-	// Otimização: verifica literais comuns antes de parseExpression completo
-	switch p.cur.Lexeme {
-	case "{":
-		return p.parseCollectionLiteral()
-	case "[":
-		return p.parseArrayLiteral()
-	case "&":
-		return p.parseReferenceExpr()
-	default:
-		return p.parseExpression(LOWEST)
+	// Verifica se há mais identificadores (não permitido em typed declaration)
+	if p.cur.Lexeme == "," {
+		p.cur, p.nxt = savedCur, savedNxt // Restaura
+		return nil
 	}
+
+	var init Expr
+	if p.cur.Lexeme == "=" {
+		p.advanceToken()
+		init = p.parseExpression(LOWEST)
+		if init == nil {
+			p.errorf("expected expression after '='")
+			return nil
+		}
+	}
+
+	return &VarDecl{Name: names[0], Type: typ, Init: init}
 }
 
 // ============================
@@ -122,8 +176,8 @@ func (p *Parser) parseFunctionDecl(generic bool) Stmt {
 		}
 	}
 
-	returnType := p.parseType()
-	if returnType == nil {
+	returnTypes := p.parseReturnTypeList()
+	if returnTypes == nil {
 		return nil
 	}
 
@@ -150,11 +204,11 @@ func (p *Parser) parseFunctionDecl(generic bool) Stmt {
 	}
 
 	return &FunctionDecl{
-		Name:       name,
-		Generics:   generics,
-		Params:     params,
-		ReturnType: returnType,
-		Body:       body,
+		Name:        name,
+		Generics:    generics,
+		Params:      params,
+		ReturnTypes: returnTypes,
+		Body:        body,
 	}
 }
 
@@ -172,28 +226,37 @@ func (p *Parser) parseFunctionParameters() []*Param {
 	params := make([]*Param, 0, 4)
 
 	for {
+		// Primeiro: parse do tipo
 		typ := p.parseType()
 		if typ == nil {
 			p.errorf("expected parameter type")
 			return nil
 		}
 
+		// Segundo: parse do nome do parâmetro
 		if p.cur.Type != lexer.IDENT {
 			p.errorf("expected parameter name")
 			return nil
 		}
-
-		params = append(params, &Param{Name: p.cur.Lexeme, Type: typ})
+		name := p.cur.Lexeme
 		p.advanceToken()
 
+		params = append(params, &Param{Name: name, Type: typ})
+
+		// Se tem vírgula, continua para próximo parâmetro
+		if p.cur.Lexeme == "," {
+			p.advanceToken()
+			continue
+		}
+
+		// Se não tem vírgula, terminou
 		if p.cur.Lexeme == ")" {
 			p.advanceToken()
 			break
 		}
 
-		if !p.expectAndConsume(",") {
-			return nil
-		}
+		p.errorf("expected ',' or ')' in parameter list")
+		return nil
 	}
 
 	return params
@@ -379,6 +442,9 @@ func (p *Parser) parseImplementBody() (*InitDecl, []*MethodDecl) {
 		method := p.parseMethodDecl()
 		if method != nil {
 			methods = append(methods, method)
+		} else {
+			// Sincroniza se falhar no método
+			p.syncImplMember()
 		}
 	}
 
@@ -392,16 +458,13 @@ func (p *Parser) parseMethodDecl() *MethodDecl {
 		generics = p.parseGenericParamsWithPrefix()
 	}
 
-	returnType := p.parseType()
-	if returnType == nil {
-		p.errorf("expected return type for method")
-		p.syncImplMember()
+	returnTypes := p.parseReturnTypeList()
+	if returnTypes == nil {
 		return nil
 	}
 
 	if p.cur.Type != lexer.IDENT {
-		p.errorf("expected method name")
-		p.syncImplMember()
+		// Não consome se falhar, deixa sync lidar
 		return nil
 	}
 
@@ -412,11 +475,11 @@ func (p *Parser) parseMethodDecl() *MethodDecl {
 	body := p.parseFunctionBody()
 
 	return &MethodDecl{
-		Name:       name,
-		Generics:   generics,
-		Params:     params,
-		ReturnType: returnType,
-		Body:       body,
+		Name:        name,
+		Generics:    generics,
+		Params:      params,
+		ReturnTypes: returnTypes,
+		Body:        body,
 	}
 }
 
@@ -430,6 +493,9 @@ func (p *Parser) parseInitDecl() *InitDecl {
 
 // syncImplMember sincroniza após erro em membro de implementação
 func (p *Parser) syncImplMember() {
+	if p.cur.Type == lexer.EOF || p.cur.Lexeme == "}" {
+		return
+	}
 	p.advanceToken()
 	for p.cur.Lexeme != "}" && p.cur.Type != lexer.EOF {
 		if p.cur.Lexeme == ";" {
@@ -461,8 +527,8 @@ func (p *Parser) parseGenericDeclaration() Stmt {
 	case "struct":
 		return p.parseStructDecl(generics)
 	default:
-		returnType := p.parseType()
-		if returnType == nil {
+		returnTypes := p.parseReturnTypeList()
+		if returnTypes == nil {
 			p.errorf("expected struct or return type after generics")
 			return nil
 		}
@@ -484,11 +550,11 @@ func (p *Parser) parseGenericDeclaration() Stmt {
 		body := p.parseFunctionBody()
 
 		return &FunctionDecl{
-			Name:       name,
-			Generics:   generics,
-			Params:     params,
-			ReturnType: returnType,
-			Body:       body,
+			Name:        name,
+			Generics:    generics,
+			Params:      params,
+			ReturnTypes: returnTypes,
+			Body:        body,
 		}
 	}
 }
@@ -504,8 +570,8 @@ func (p *Parser) parseGenericTopLevel() Stmt {
 	case "struct":
 		return p.parseStructDecl(generics)
 	default:
-		returnType := p.parseType()
-		if returnType == nil {
+		returnTypes := p.parseReturnTypeList()
+		if returnTypes == nil {
 			return nil
 		}
 		if !p.expectAndConsume("function") {
@@ -519,11 +585,11 @@ func (p *Parser) parseGenericTopLevel() Stmt {
 		params := p.parseFunctionParameters()
 		body := p.parseFunctionBody()
 		return &FunctionDecl{
-			Name:       name,
-			Generics:   generics,
-			Params:     params,
-			ReturnType: returnType,
-			Body:       body,
+			Name:        name,
+			Generics:    generics,
+			Params:      params,
+			ReturnTypes: returnTypes,
+			Body:        body,
 		}
 	}
 }

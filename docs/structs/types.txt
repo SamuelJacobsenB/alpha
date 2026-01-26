@@ -2,6 +2,3 @@ package example
 
 type Number int | float
 Number num = 5.5
-
-generic<T> Hello [T, T]
-Hello hello = generic<int> [10, 20]

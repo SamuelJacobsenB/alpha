@@ -1,0 +1,7 @@
+package convertion
+
+int function sum(int a, int b) {
+    return a + b
+}
+
+string a = string(sum(10, 20))

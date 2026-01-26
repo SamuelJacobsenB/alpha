@@ -68,26 +68,38 @@ func (p *Parser) skipSemicolons() {
 
 // parseDefaultStmt lida com declarações de função e statements de expressão
 func (p *Parser) parseDefaultStmt() Stmt {
-	// Caso 1: Declaração de função (tipo seguido de "function")
-	if isTypeKeyword(p.cur.Lexeme) && p.nxt.Lexeme == "function" {
+	if p.isFunctionDecl() {
 		return p.parseFunctionDecl(false)
 	}
 
-	// Caso 2: Declaração de variável tipada
-	if p.seemsLikeTypeDeclaration() {
-		return p.parseAndConsume(p.parseTypedVarDecl)
+	// Tenta parsear como declaração de variável. Se não for, ele restaura o estado e retorna nil.
+	if stmt := p.parseTypedVarDecl(); stmt != nil {
+		if p.cur.Lexeme == ";" {
+			p.advanceToken()
+		}
+		return stmt
 	}
 
-	// Caso 3: Statement de expressão
 	return p.parseAndConsume(p.parseExprStmt)
 }
 
-// seemsLikeTypeDeclaration verifica se parece com declaração de tipo
-func (p *Parser) seemsLikeTypeDeclaration() bool {
-	return isTypeKeyword(p.cur.Lexeme) ||
-		(p.cur.Type == lexer.IDENT && p.nxt.Type == lexer.IDENT) ||
-		(p.cur.Type == lexer.IDENT && p.nxt.Lexeme == "<") ||
-		(p.cur.Type == lexer.IDENT && p.nxt.Lexeme == "[")
+// isFunctionDecl verifica se é declaração de função usando lookahead seguro (p.nxt)
+func (p *Parser) isFunctionDecl() bool {
+	if !p.isValidTypeStart() {
+		return false
+	}
+
+	// Padrão 1: "int function" -> Tipo seguido da keyword function
+	if p.nxt.Lexeme == "function" {
+		return true
+	}
+
+	// Padrão 2: "string, string" -> Tipo seguido de vírgula (múltiplos retornos)
+	if p.nxt.Lexeme == "," {
+		return true
+	}
+
+	return false
 }
 
 // ============================
@@ -194,6 +206,9 @@ func (p *Parser) parseSwitchCases() []*CaseClause {
 		clause := p.parseCaseClause()
 		if clause != nil {
 			cases = append(cases, clause)
+		} else {
+			// Avança token se falhar ao parsear caso
+			p.advanceToken()
 		}
 	}
 
@@ -238,6 +253,12 @@ func (p *Parser) parseCaseBody() []Stmt {
 		stmt := p.parseTopLevel()
 		if stmt != nil {
 			body = append(body, stmt)
+		} else {
+			// Avança token se falhar ao parsear statement
+			if p.cur.Type == lexer.EOF {
+				break
+			}
+			p.advanceToken()
 		}
 	}
 
@@ -432,19 +453,37 @@ func (p *Parser) isForInLoop() bool {
 // STATEMENTS DE FLUXO
 // ============================
 
-// parseReturn analisa um statement de retorno
+// parseReturn analisa um statement de retorno (agora com suporte a múltiplos valores)
 func (p *Parser) parseReturn() Stmt {
 	p.advanceToken() // consome 'return'
 
 	if p.isAtEndOfStatement() {
 		p.consumeOptionalSemicolon()
-		return &ReturnStmt{Value: nil}
+		return &ReturnStmt{Values: nil}
 	}
 
-	value := p.parseExpression(LOWEST)
+	var values []Expr
+
+	// Parse da primeira expressão
+	val := p.parseExpression(LOWEST)
+	if val != nil {
+		values = append(values, val)
+	}
+
+	// Loop para expressões subsequentes separadas por vírgula
+	for p.cur.Lexeme == "," {
+		p.advanceToken() // consome a vírgula
+		val := p.parseExpression(LOWEST)
+		if val == nil {
+			p.errorf("expected expression after ',' in return statement")
+			return nil
+		}
+		values = append(values, val)
+	}
+
 	p.consumeOptionalSemicolon()
 
-	return &ReturnStmt{Value: value}
+	return &ReturnStmt{Values: values}
 }
 
 // parseBreak analisa um statement break
@@ -516,6 +555,12 @@ func (p *Parser) parseBlock() []Stmt {
 		stmt := p.parseTopLevel()
 		if stmt != nil {
 			stmts = append(stmts, stmt)
+		} else {
+			// Se parseTopLevel falhar, avança token manualmente para evitar loop
+			if p.cur.Type == lexer.EOF {
+				break
+			}
+			p.advanceToken()
 		}
 	}
 

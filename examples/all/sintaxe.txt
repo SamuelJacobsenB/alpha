@@ -252,9 +252,13 @@ Hello hello = generic<int> 10
 
 // Built-in functions
 lenght(arr)                // comprimento de array/string/map/set
-append(arr, element)    // adicionar elemento a array
-remove(arr, element)        // remover elemento de map, set e arr
-removeIndex(arr, 0) // remover chave do map, set e arr
+append(&arr, element)    // adicionar elemento a array
+remove(&arr, element)        // remover elemento de map, set e arr
+removeIndex(&arr, 0) // remover chave do map, set e arr
+delete(&map | &set, value)
+clear(&map | &set)
+has(&set)
+add(&set)
 
 // ==============================================
 // 11. PACOTES NATIVOS DISPONÍVEIS
@@ -273,7 +277,14 @@ math, time, validators
 crypto, errors, html, os, env, sql
 
 // ==============================================
-// 12. REGRAS GERAIS
+// 12. CONVERSÃO DE TIPOS
+// ==============================================
+
+string num10 = string(10)
+// other examples: int(), float()
+
+// ==============================================
+// 13. REGRAS GERAIS
 // ==============================================
 
 // - Tipos primitivos: byte, char, string, int, float, double, boolean, error, component, void, null

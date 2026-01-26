@@ -1,23 +1,24 @@
 package func
 
-int function soma(int a, b) {
+int function soma(int a, int b) {
     return a + b
 }
 int sum = soma(5, 10)
 
-string, error function isOldEnough(int age) {
-    if(age < 18) {
-        return "", errors.new("User not old enough")
-    }
-
-    return "Ok, welcome", null
+bool function isOldEnough(int age) {
+    return age > 18
 }
 
-generic<T> string function hello(T msg) {
+generic<T> string function hello1(T msg) {
     return "Hello " + msg
 }
-var message = generic<int> hello(30)
+var message = generic<int> hello1(30)
 
-generic<A, B> string function hello(A a, B b) {
+generic<A, B> string function hello2(A a, B b) {
     return string(a + b)
 }
+
+string, string function hello3() {
+    return "Hello", "World!"
+}
+var a, b = hello3()

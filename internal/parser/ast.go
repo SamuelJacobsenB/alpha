@@ -106,11 +106,11 @@ func (c *ConstDecl) nodePos()  {}
 
 // FunctionDecl representa uma declaração de função
 type FunctionDecl struct {
-	Name       string
-	Generics   []*GenericParam
-	Params     []*Param
-	ReturnType Type
-	Body       []Stmt
+	Name        string
+	Generics    []*GenericParam
+	Params      []*Param
+	ReturnTypes []Type
+	Body        []Stmt
 }
 
 func (f *FunctionDecl) stmtNode() {}
@@ -185,11 +185,11 @@ func (i *InitDecl) nodePos() {}
 
 // MethodDecl representa uma declaração de método
 type MethodDecl struct {
-	Name       string
-	Generics   []*GenericParam
-	Params     []*Param
-	ReturnType Type
-	Body       []Stmt
+	Name        string
+	Generics    []*GenericParam
+	Params      []*Param
+	ReturnTypes []Type
+	Body        []Stmt
 }
 
 func (m *MethodDecl) nodePos() {}
@@ -279,7 +279,7 @@ func (c *CaseClause) nodePos() {}
 
 // ReturnStmt representa um statement de retorno
 type ReturnStmt struct {
-	Value Expr
+	Values []Expr // ALTERADO: Suporta múltiplos valores de retorno
 }
 
 func (r *ReturnStmt) stmtNode() {}
@@ -477,6 +477,7 @@ func (m *MapEntry) nodePos() {}
 
 // StructLiteral representa um literal de estrutura
 type StructLiteral struct {
+	Name   string
 	Fields []*StructField
 }
 
@@ -523,6 +524,15 @@ type GenericCallExpr struct {
 
 func (g *GenericCallExpr) exprNode() {}
 func (g *GenericCallExpr) nodePos()  {}
+
+// TypeCastExpr representa uma conversão de tipo explícita, ex: int(x)
+type TypeCastExpr struct {
+	Type Type // O tipo alvo (int, float, string)
+	Expr Expr // A expressão sendo convertida
+}
+
+func (t *TypeCastExpr) exprNode() {}
+func (t *TypeCastExpr) nodePos()  {}
 
 // GenericSpecialization representa uma especialização genérica
 type GenericSpecialization struct {
@@ -632,3 +642,34 @@ type FunctionType struct {
 
 func (f *FunctionType) typeNode() {}
 func (f *FunctionType) nodePos()  {}
+
+// ============================
+// DECLARAÇÕES MULTIPLAS
+// ============================
+
+// MultiVarDecl representa uma declaração de múltiplas variáveis
+type MultiVarDecl struct {
+	Names []string
+	Type  Type
+	Init  Expr
+}
+
+func (m *MultiVarDecl) stmtNode() {}
+func (m *MultiVarDecl) nodePos()  {}
+
+// MultiConstDecl representa uma declaração de múltiplas constantes
+type MultiConstDecl struct {
+	Names []string
+	Init  Expr
+}
+
+func (m *MultiConstDecl) stmtNode() {}
+func (m *MultiConstDecl) nodePos()  {}
+
+// SpreadExpr representa o operador de espalhamento ...expr
+type SpreadExpr struct {
+	Expr Expr
+}
+
+func (s *SpreadExpr) exprNode() {}
+func (s *SpreadExpr) nodePos()  {}

@@ -1,0 +1,1657 @@
+package semantic
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/alpha/internal/parser"
+)
+
+func (c *Checker) checkExpr(expr parser.Expr) Type {
+	switch e := expr.(type) {
+	// ... (Mantenha os casos de literais simples e Identifier) ...
+	case *parser.IntLiteral:
+		return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "int"}}
+	case *parser.FloatLiteral:
+		return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "float"}}
+	case *parser.BoolLiteral:
+		return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "bool"}}
+	case *parser.StringLiteral:
+		return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "string"}}
+	case *parser.NullLiteral:
+		return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "null"}}
+
+	// Em checkExpr, caso Identifier para tipos genéricos:
+	case *parser.Identifier:
+		sym := c.CurrentScope.Resolve(e.Name)
+		if sym == nil {
+			// Verificar se é um tipo genérico (parâmetro de função genérica)
+			// Primeiro verifica no escopo atual (parâmetros genéricos)
+			if strings.Contains(e.Name, ".") {
+				parts := strings.Split(e.Name, ".")
+				if len(parts) == 2 {
+					moduleSym := c.CurrentScope.Resolve(parts[0])
+					if moduleSym != nil && moduleSym.Kind == KindImport {
+						return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "any"}}
+					}
+				}
+			}
+
+			// Verificar se é um parâmetro genérico (como T)
+			// Isso será verificado na função checkFunctionDecl
+			c.reportError(0, 0, fmt.Sprintf("Undeclared identifier '%s'", e.Name))
+			return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "error"}}
+		}
+
+		if sym.Kind == KindImport && sym.Type == nil {
+			return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "any"}}
+		}
+
+		// Se for parâmetro genérico, retornar seu tipo
+		if sym.Kind == KindGenericParam {
+			return sym.Type
+		}
+
+		return sym.Type
+
+	case *parser.UnaryExpr:
+		valType := c.checkExpr(e.Expr)
+		return valType
+
+	case *parser.BinaryExpr:
+		leftType := c.checkExpr(e.Left)
+		rightType := c.checkExpr(e.Right)
+
+		switch e.Op {
+		case "+":
+			// Adição ou concatenação
+			leftTypeStr := StringifyType(leftType)
+			rightTypeStr := StringifyType(rightType)
+
+			// Se um dos lados for um tipo genérico, retornar any (não sabemos o tipo resultante)
+			if c.isGenericType(leftType) || c.isGenericType(rightType) {
+				return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "any"}}
+			}
+
+			// Se ambos são numéricos
+			if (leftTypeStr == "int" || leftTypeStr == "float") &&
+				(rightTypeStr == "int" || rightTypeStr == "float") {
+				if leftTypeStr == "float" || rightTypeStr == "float" {
+					return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "float"}}
+				}
+				return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "int"}}
+			}
+
+			// Se um é string, concatenação
+			if leftTypeStr == "string" || rightTypeStr == "string" {
+				// Verificar se o outro lado é compatível com string
+				if leftTypeStr != "string" && !c.isGenericType(leftType) && leftTypeStr != "any" {
+					c.reportError(0, 0, fmt.Sprintf("Cannot concatenate string with non-string type %s", leftTypeStr))
+					return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "error"}}
+				}
+				if rightTypeStr != "string" && !c.isGenericType(rightType) && rightTypeStr != "any" {
+					c.reportError(0, 0, fmt.Sprintf("Cannot concatenate string with non-string type %s", rightTypeStr))
+					return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "error"}}
+				}
+				return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "string"}}
+			}
+
+			// Operação não suportada
+			c.reportError(0, 0, fmt.Sprintf("Operator '+' not supported for types %s and %s", leftTypeStr, rightTypeStr))
+			return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "error"}}
+		case ">", "<", ">=", "<=", "==", "!=":
+			// Operações de comparação - retornam bool
+			return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "bool"}}
+
+		default:
+			// Para outros operadores, retorna o tipo da esquerda
+			return leftType
+		}
+
+	case *parser.TernaryExpr:
+		trueType := c.checkExpr(e.TrueExpr)
+		return trueType
+
+	case *parser.AssignExpr:
+		leftType := c.checkExpr(e.Left)
+		return leftType
+
+	case *parser.CallExpr:
+		// Verificação especial para append: retorna o tipo do primeiro argumento
+		if ident, ok := e.Callee.(*parser.Identifier); ok && ident.Name == "append" {
+			if len(e.Args) > 0 {
+				argType := c.checkExpr(e.Args[0])
+				// Validar argumentos restantes
+				for i := 1; i < len(e.Args); i++ {
+					c.checkExpr(e.Args[i])
+				}
+				return argType
+			}
+		}
+
+		for _, arg := range e.Args {
+			c.checkExpr(arg)
+		}
+
+		var returnType Type
+		if ident, ok := e.Callee.(*parser.Identifier); ok {
+			sym := c.CurrentScope.Resolve(ident.Name)
+			if sym != nil {
+				switch sym.Kind {
+				case KindFunction:
+					returnType = sym.Type
+				case KindImport:
+					returnType = &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "any"}}
+				default:
+					c.reportError(0, 0, fmt.Sprintf("'%s' is not a function", ident.Name))
+					return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "error"}}
+				}
+			} else {
+				// Verificar se é uma função genérica chamada sem especialização
+				// Ex: hello1(30) sem generic<int>
+				c.reportError(0, 0, fmt.Sprintf("Undeclared function '%s'", ident.Name))
+				return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "error"}}
+			}
+		} else {
+			// Para chamadas complexas (como generic<int> hello1(30))
+			returnType = &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "any"}}
+		}
+
+		return returnType
+
+	case *parser.StructLiteral:
+		// Se o literal tem um nome (ex: Message { ... }), retorna esse tipo
+		if e.Name != "" {
+			return &ParserTypeWrapper{Type: &parser.IdentifierType{Name: e.Name}}
+		}
+		// Se for anônimo, retorna "object"
+		return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "object"}}
+
+	case *parser.GenericSpecialization:
+		// Trata especializações como "generic<string> Car { ... }"
+		// O Parser coloca o StructLiteral dentro do Callee
+		if structLit, ok := e.Callee.(*parser.StructLiteral); ok {
+			// Se o struct literal tiver nome (Car), retorna um tipo genérico construído
+			if structLit.Name != "" {
+				return &ParserTypeWrapper{Type: &parser.GenericType{
+					Name:     structLit.Name,
+					TypeArgs: e.TypeArgs,
+				}}
+			}
+		}
+
+		// Se for apenas uma especialização de identificador ou outro caso
+		calleeType := c.checkExpr(e.Callee)
+		return calleeType
+
+	case *parser.ArrayLiteral:
+		if len(e.Elements) == 0 {
+			return &ParserTypeWrapper{Type: &parser.ArrayType{ElementType: &parser.PrimitiveType{Name: "any"}}}
+		}
+
+		// Determinar o tipo base de todos os elementos
+		var elementType parser.Type
+		for i, elem := range e.Elements {
+			elemType := c.checkExpr(elem)
+			if wrapper, ok := elemType.(*ParserTypeWrapper); ok {
+				if i == 0 {
+					elementType = wrapper.Type
+				} else {
+					// Verificar compatibilidade com o primeiro tipo
+					if !AreParserTypesCompatible(elementType, wrapper.Type) {
+						c.reportError(0, 0, fmt.Sprintf("Inconsistent array element types: %s vs %s",
+							StringifyParserType(elementType), StringifyParserType(wrapper.Type)))
+						// Usar o primeiro tipo como fallback
+						break
+					}
+				}
+			}
+		}
+
+		if elementType == nil {
+			elementType = &parser.PrimitiveType{Name: "any"}
+		}
+
+		return &ParserTypeWrapper{Type: &parser.ArrayType{ElementType: elementType}}
+
+	case *parser.ReferenceExpr:
+		exprType := c.checkExpr(e.Expr)
+		if wrapper, ok := exprType.(*ParserTypeWrapper); ok {
+			return &ParserTypeWrapper{Type: &parser.PointerType{BaseType: wrapper.Type}}
+		}
+		return &ParserTypeWrapper{Type: &parser.PointerType{BaseType: &parser.PrimitiveType{Name: "any"}}}
+
+		// check_expr.go - adicionar estes casos
+	case *parser.MapLiteral:
+		// Para um MapLiteral como map<int, string>{1: "Hello", 2: "Bye"}
+		// Retorna o tipo correto do mapa
+		return &ParserTypeWrapper{Type: &parser.MapType{
+			KeyType:   &parser.PrimitiveType{Name: "int"},
+			ValueType: &parser.PrimitiveType{Name: "string"},
+		}}
+
+	case *parser.SetLiteral:
+		// Para um SetLiteral como set<int> {1, 2, 3, 4}
+		// Retorna o tipo correto do conjunto
+		return &ParserTypeWrapper{Type: &parser.SetType{
+			ElementType: &parser.PrimitiveType{Name: "int"},
+		}}
+
+	case *parser.SpreadExpr:
+		// Para ...arr3, retorna o tipo do elemento do array sendo espalhado
+		arrayType := c.checkExpr(e.Expr)
+
+		// Se for um ParserTypeWrapper com ArrayType, retorna o tipo do elemento
+		if wrapper, ok := arrayType.(*ParserTypeWrapper); ok {
+			if arrType, ok := wrapper.Type.(*parser.ArrayType); ok {
+				// Spread de um array retorna o tipo do elemento (não um array de arrays)
+				return &ParserTypeWrapper{Type: arrType.ElementType}
+			}
+		}
+
+		// Fallback
+		return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "any"}}
+
+	case *parser.GenericCallExpr:
+		// Resolver o callee (deve ser um identificador de função)
+		if ident, ok := e.Callee.(*parser.Identifier); ok {
+			sym := c.CurrentScope.Resolve(ident.Name)
+			if sym == nil || sym.Kind != KindFunction {
+				c.reportError(0, 0, fmt.Sprintf("Undeclared function '%s'", ident.Name))
+				return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "error"}}
+			}
+
+			// Obter o tipo de retorno da função
+			returnType := sym.Type
+
+			// Aplicar especialização genérica se necessário
+			// (Para simplificação, retornamos o tipo de retorno da função)
+			// Em uma implementação completa, substituiríamos os parâmetros genéricos
+
+			// Verificar argumentos de tipo
+			for _, typeArg := range e.TypeArgs {
+				c.validateTypeExists(typeArg)
+			}
+
+			// Verificar argumentos da função
+			for _, arg := range e.Args {
+				c.checkExpr(arg)
+			}
+
+			return returnType
+		}
+
+		// Fallback para outros casos
+		for _, typeArg := range e.TypeArgs {
+			c.validateTypeExists(typeArg)
+		}
+		for _, arg := range e.Args {
+			c.checkExpr(arg)
+		}
+		return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "any"}}
+
+	case *parser.TypeCastExpr:
+		// Verificar o tipo da expressão que está sendo convertida
+		exprType := c.checkExpr(e.Expr)
+
+		// Verificar se o tipo de destino existe
+		c.validateTypeExists(e.Type)
+
+		// Se a expressão é de tipo genérico, permitir a conversão
+		if c.isGenericType(exprType) {
+			// Permitir conversão de tipos genéricos para string
+			return c.wrapType(e.Type)
+		}
+
+		// Para tipos não genéricos, fazer verificação básica
+		exprTypeStr := StringifyType(exprType)
+		targetTypeStr := StringifyParserType(e.Type)
+
+		// Permitir conversões comuns
+		if targetTypeStr == "string" {
+			// Permitir conversão de int, float, bool para string
+			if exprTypeStr == "int" || exprTypeStr == "float" || exprTypeStr == "bool" {
+				return c.wrapType(e.Type)
+			}
+		}
+
+		// Se chegou aqui, a conversão pode não ser válida, mas retornamos o tipo alvo
+		// (em uma implementação completa, faríamos mais verificações)
+		return c.wrapType(e.Type)
+
+	case *parser.IndexExpr:
+		// Verificar se e.Array existe (pode ter nome diferente)
+		arrayType := c.checkExpr(e.Array)
+		indexType := c.checkExpr(e.Index)
+
+		// Verificar se o array é um tipo que pode ser indexado
+		if wrapper, ok := arrayType.(*ParserTypeWrapper); ok {
+			switch t := wrapper.Type.(type) {
+			case *parser.ArrayType:
+				// Verificar se o índice é um tipo inteiro
+				indexStr := StringifyType(indexType)
+				if indexStr != "int" && indexStr != "int?" && !c.isGenericType(indexType) {
+					c.reportError(0, 0, fmt.Sprintf("Array index must be integer, got %s", indexStr))
+					return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "error"}}
+				}
+				// Retornar o tipo do elemento do array
+				return &ParserTypeWrapper{Type: t.ElementType}
+
+			case *parser.MapType:
+				// Verificar compatibilidade do tipo da chave
+				if !AreParserTypesCompatible(t.KeyType, c.unwrapType(indexType)) {
+					c.reportError(0, 0, fmt.Sprintf("Map key type mismatch: expected %s, got %s",
+						StringifyParserType(t.KeyType), StringifyType(indexType)))
+					return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "error"}}
+				}
+				// Retornar o tipo do valor do mapa
+				return &ParserTypeWrapper{Type: t.ValueType}
+
+			case *parser.SetType:
+				// Sets não suportam indexação direta
+				c.reportError(0, 0, "Cannot index a set directly. Use 'has()' to check membership.")
+				return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "error"}}
+
+			case *parser.PrimitiveType:
+				if t.Name == "string" {
+					// Strings podem ser indexadas para obter caracteres
+					indexStr := StringifyType(indexType)
+					if indexStr != "int" && indexStr != "int?" && !c.isGenericType(indexType) {
+						c.reportError(0, 0, fmt.Sprintf("String index must be integer, got %s", indexStr))
+						return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "error"}}
+					}
+					return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "string"}}
+				}
+				c.reportError(0, 0, fmt.Sprintf("Cannot index type %s", t.Name))
+				return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "error"}}
+
+			default:
+				c.reportError(0, 0, fmt.Sprintf("Cannot index type %s", StringifyParserType(wrapper.Type)))
+				return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "error"}}
+			}
+		}
+
+		// Fallback para tipos não wrapped
+		return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "any"}}
+
+	default:
+		// Caso padrão para expressões não tratadas
+		c.reportError(0, 0, fmt.Sprintf("Unhandled expression type: %T", expr))
+		return &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "error"}}
+	}
+
+}
+
+// isGenericType verifica se um Type é um tipo genérico
+func (c *Checker) isGenericType(t Type) bool {
+	if t == nil {
+		return false
+	}
+	typeStr := StringifyType(t)
+	return IsGenericTypeName(typeStr)
+}
+
+
+package semantic
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/alpha/internal/parser"
+)
+
+func (c *Checker) checkStmt(stmt parser.Stmt) {
+	switch s := stmt.(type) {
+
+	case *parser.ConstDecl:
+		c.checkConstDecl(s)
+
+	case *parser.VarDecl:
+		c.checkVarDecl(s)
+
+	case *parser.MultiVarDecl:
+		c.checkMultiVarDecl(s)
+
+	case *parser.MultiConstDecl:
+		c.checkMultiConstDecl(s)
+
+	case *parser.FunctionDecl:
+		c.checkFunctionDecl(s)
+
+	case *parser.StructDecl:
+		c.checkStructDecl(s)
+
+	case *parser.TypeDecl:
+		c.checkTypeDecl(s)
+
+	case *parser.ImplDecl:
+		c.checkImplDecl(s)
+
+	case *parser.BlockStmt:
+		c.checkBlock(s.Body)
+
+	case *parser.IfStmt:
+		condType := c.checkExpr(s.Cond)
+		if !c.isConditionableType(condType) {
+			c.reportError(0, 0, fmt.Sprintf("Condition in 'if' must be boolean or nullable, got %s", StringifyType(condType)))
+		}
+		c.checkBlockScope(s.Then)
+		if s.Else != nil {
+			c.checkBlockScope(s.Else)
+		}
+
+	case *parser.WhileStmt:
+		condType := c.checkExpr(s.Cond)
+		if !c.isConditionableType(condType) {
+			c.reportError(0, 0, "Condition in 'while' must be boolean or nullable")
+		}
+		prevLoop := c.inLoop
+		c.inLoop = true
+		c.checkBlockScope(s.Body)
+		c.inLoop = prevLoop
+
+	case *parser.DoWhileStmt:
+		prevLoop := c.inLoop
+		c.inLoop = true
+		c.checkBlockScope(s.Body)
+		c.inLoop = prevLoop
+
+		condType := c.checkExpr(s.Cond)
+		if !c.isBooleanType(condType) {
+			c.reportError(0, 0, "Condition in 'do-while' must be boolean")
+		}
+
+	case *parser.ForStmt:
+		c.enterScope() // For cria escopo para o Init
+		if s.Init != nil {
+			c.checkStmt(s.Init)
+		}
+		if s.Cond != nil {
+			condType := c.checkExpr(s.Cond)
+			if !c.isBooleanType(condType) {
+				c.reportError(0, 0, "Condition in 'for' must be boolean")
+			}
+		}
+		if s.Post != nil {
+			c.checkStmt(s.Post)
+		}
+
+		prevLoop := c.inLoop
+		c.inLoop = true
+		for _, bodyStmt := range s.Body {
+			c.checkStmt(bodyStmt)
+		}
+		c.inLoop = prevLoop
+
+		c.exitScope()
+
+	case *parser.SwitchStmt:
+		c.checkSwitchStmt(s)
+
+	case *parser.ReturnStmt:
+		if c.currentFuncReturnType == nil {
+			c.reportError(0, 0, "Return statement outside of function")
+			return
+		}
+
+		// Se não há valores de retorno
+		if s.Values == nil || len(s.Values) == 0 {
+			// Verificar se a função é void
+			if c.currentFuncReturnType != nil &&
+				StringifyType(c.currentFuncReturnType) != "void" {
+				c.reportError(0, 0, "Non-void function must return a value")
+			}
+			return
+		}
+
+		// Verificar se o tipo de retorno da função é MultiValueType
+		if multiRet, ok := c.currentFuncReturnType.(*MultiValueType); ok {
+			// Função retorna múltiplos valores
+
+			// Verificar quantidade de valores
+			if len(s.Values) != len(multiRet.Types) {
+				c.reportError(0, 0, fmt.Sprintf("Function returns %d values, but return statement has %d",
+					len(multiRet.Types), len(s.Values)))
+				return
+			}
+
+			// Verificar cada valor individualmente
+			for i, val := range s.Values {
+				valType := c.checkExpr(val)
+				expectedType := multiRet.Types[i]
+
+				if !AreTypesCompatible(expectedType, valType) {
+					c.reportError(0, 0, fmt.Sprintf("Type mismatch in return value %d. Expected %s, got %s",
+						i+1, StringifyType(expectedType), StringifyType(valType)))
+				}
+			}
+		} else {
+			// Função retorna único valor
+			if len(s.Values) > 1 {
+				c.reportError(0, 0, "Function returns single value, but return statement has multiple values")
+				return
+			}
+
+			valType := c.checkExpr(s.Values[0])
+			if !AreTypesCompatible(c.currentFuncReturnType, valType) {
+				c.reportError(0, 0, fmt.Sprintf("Type mismatch in return value. Expected %s, got %s",
+					StringifyType(c.currentFuncReturnType), StringifyType(valType)))
+			}
+		}
+
+	case *parser.BreakStmt:
+		if !c.inLoop {
+			c.reportError(0, 0, "'break' is only allowed inside loops")
+		}
+
+	case *parser.ContinueStmt:
+		if !c.inLoop {
+			c.reportError(0, 0, "'continue' is only allowed inside loops")
+		}
+
+	case *parser.ExprStmt:
+		c.checkExpr(s.Expr)
+
+	case *parser.PackageDecl:
+		// Nada a verificar para declaração de pacote
+		break
+
+	case *parser.ImportDecl:
+		c.checkImportDecl(s)
+
+	case *parser.ExportDecl:
+		c.checkExportDecl(s)
+	}
+}
+
+func (c *Checker) checkConstDecl(decl *parser.ConstDecl) {
+	initType := c.checkExpr(decl.Init)
+
+	sym := &Symbol{
+		Name: decl.Name,
+		Kind: KindConst,
+		Type: initType,
+		Node: decl,
+	}
+
+	if !c.CurrentScope.Define(decl.Name, sym) {
+		c.reportError(0, 0, fmt.Sprintf("Constant '%s' redeclared in this scope", decl.Name))
+	}
+}
+
+// check_smtp.go - Modificar a função checkVarDecl
+
+func (c *Checker) checkVarDecl(decl *parser.VarDecl) {
+	var initType Type
+	if decl.Init != nil {
+		initType = c.checkExpr(decl.Init)
+
+		// Se o tipo do inicializador for "error", não prosseguir
+		if StringifyType(initType) == "error" {
+			return
+		}
+
+		if decl.Type == nil {
+			// Inferência de tipo
+			decl.Type = c.unwrapType(initType)
+		} else {
+			// Resolver o tipo declarado (pode ser um alias como "Number")
+			resolvedDeclType := c.resolveType(decl.Type)
+			declType := c.wrapType(resolvedDeclType)
+			if !c.areTypesCompatible(declType, initType) {
+				c.reportError(0, 0, fmt.Sprintf("Cannot assign type %s to variable '%s' of type %s",
+					StringifyType(initType), decl.Name, StringifyType(declType)))
+			}
+		}
+	}
+
+	var symType Type
+	if decl.Type != nil {
+		// Para o símbolo, armazenamos o tipo declarado (não resolvido)
+		// mas verificamos a compatibilidade com o tipo resolvido
+		symType = c.wrapType(decl.Type)
+	} else if initType != nil {
+		symType = initType
+	} else {
+		// Variável sem tipo e sem inicializador (declaração forward)
+		symType = &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "any"}}
+	}
+
+	sym := &Symbol{
+		Name: decl.Name,
+		Kind: KindVar,
+		Type: symType,
+		Node: decl,
+	}
+
+	if !c.CurrentScope.Define(decl.Name, sym) {
+		c.reportError(0, 0, fmt.Sprintf("Variable '%s' already declared in this scope", decl.Name))
+	}
+}
+
+// checkMultiVarDecl processa declaração múltipla de variáveis
+func (c *Checker) checkMultiVarDecl(decl *parser.MultiVarDecl) {
+	// Verificar inicializador
+	if decl.Init == nil {
+		c.reportError(0, 0, "Multiple variables declaration must have initializer")
+		return
+	}
+
+	initType := c.checkExpr(decl.Init)
+	if initType == nil {
+		c.reportError(0, 0, "Invalid initializer in multi-variable declaration")
+		return
+	}
+
+	// Verificar se o inicializador retorna múltiplos valores
+	var valueTypes []Type
+	if multiType, ok := initType.(*MultiValueType); ok {
+		valueTypes = multiType.Types
+	} else {
+		// Se não for MultiValueType, todos recebem o mesmo tipo
+		valueTypes = make([]Type, len(decl.Names))
+		for i := range valueTypes {
+			valueTypes[i] = initType
+		}
+	}
+
+	// Verificar compatibilidade de quantidade
+	if len(decl.Names) != len(valueTypes) {
+		c.reportError(0, 0, fmt.Sprintf("Mismatch in variable count: declared %d, but initializer provides %d values",
+			len(decl.Names), len(valueTypes)))
+		return
+	}
+
+	// Definir cada variável
+	for i, name := range decl.Names {
+		var symType Type
+		if decl.Type != nil {
+			symType = c.wrapType(decl.Type)
+		} else {
+			symType = valueTypes[i]
+		}
+
+		sym := &Symbol{
+			Name: name,
+			Kind: KindVar,
+			Type: symType,
+			Node: decl,
+		}
+
+		if !c.CurrentScope.Define(name, sym) {
+			c.reportError(0, 0, fmt.Sprintf("Variable '%s' already declared in this scope", name))
+		}
+	}
+}
+
+// checkMultiConstDecl processa declaração múltipla de constantes
+func (c *Checker) checkMultiConstDecl(decl *parser.MultiConstDecl) {
+	// Similar ao checkMultiVarDecl, mas para constantes
+	if decl.Init == nil {
+		c.reportError(0, 0, "Multiple constants declaration must have initializer")
+		return
+	}
+
+	initType := c.checkExpr(decl.Init)
+	if initType == nil {
+		c.reportError(0, 0, "Invalid initializer in multi-constant declaration")
+		return
+	}
+
+	var valueTypes []Type
+	if multiType, ok := initType.(*MultiValueType); ok {
+		valueTypes = multiType.Types
+	} else {
+		valueTypes = make([]Type, len(decl.Names))
+		for i := range valueTypes {
+			valueTypes[i] = initType
+		}
+	}
+
+	if len(decl.Names) != len(valueTypes) {
+		c.reportError(0, 0, fmt.Sprintf("Mismatch in constant count: declared %d, but initializer provides %d values",
+			len(decl.Names), len(valueTypes)))
+		return
+	}
+
+	for i, name := range decl.Names {
+		sym := &Symbol{
+			Name: name,
+			Kind: KindConst,
+			Type: valueTypes[i],
+			Node: decl,
+		}
+
+		if !c.CurrentScope.Define(name, sym) {
+			c.reportError(0, 0, fmt.Sprintf("Constant '%s' already declared in this scope", name))
+		}
+	}
+}
+
+func (c *Checker) checkFunctionDecl(fn *parser.FunctionDecl) {
+	// Converter tipos de retorno para nosso formato
+	returnType := ToMultiValueType(fn.ReturnTypes)
+
+	sym := &Symbol{Name: fn.Name, Kind: KindFunction, Type: returnType, Node: fn}
+	if !c.CurrentScope.Define(fn.Name, sym) {
+		c.reportError(0, 0, fmt.Sprintf("Function '%s' redeclared", fn.Name))
+	}
+
+	c.enterScope()
+	prevReturn := c.currentFuncReturnType
+	c.currentFuncReturnType = returnType
+
+	// Generics - registrar parâmetros genéricos como tipos
+	if fn.Generics != nil {
+		for _, g := range fn.Generics {
+			// Registrar como um tipo genérico
+			genericType := &ParserTypeWrapper{
+				Type: &parser.GenericType{
+					Name:     g.Name,
+					TypeArgs: []parser.Type{},
+				},
+			}
+			c.CurrentScope.Define(g.Name, &Symbol{
+				Name: g.Name,
+				Kind: KindGenericParam,
+				Type: genericType,
+			})
+		}
+	}
+
+	// Params
+	for _, param := range fn.Params {
+		// Validar se o tipo do parâmetro existe
+		c.validateTypeExists(param.Type)
+		paramType := c.wrapType(param.Type)
+		c.CurrentScope.Define(param.Name, &Symbol{Name: param.Name, Kind: KindVar, Type: paramType})
+	}
+
+	for _, stmt := range fn.Body {
+		c.checkStmt(stmt)
+	}
+
+	c.currentFuncReturnType = prevReturn
+	c.exitScope()
+}
+
+func (c *Checker) checkStructDecl(s *parser.StructDecl) {
+	sym := &Symbol{
+		Name: s.Name,
+		Kind: KindStruct,
+		Type: nil, // Structs não têm tipo semântico direto (é apenas uma definição)
+		Node: s,
+	}
+	// Define o struct no escopo atual (geralmente global)
+	if !c.CurrentScope.Define(s.Name, sym) {
+		c.reportError(0, 0, fmt.Sprintf("Struct '%s' already defined", s.Name))
+	}
+
+	// Cria um escopo temporário para validar os campos
+	// Isso permite que parâmetros genéricos (T) sejam visíveis dentro do struct
+	c.enterScope()
+
+	// Registra genéricos no escopo temporário
+	if s.Generics != nil {
+		for _, g := range s.Generics {
+			c.CurrentScope.Define(g.Name, &Symbol{Name: g.Name, Kind: KindGenericParam})
+		}
+	}
+
+	// Validar campos
+	fieldNames := make(map[string]bool)
+	for _, field := range s.Fields {
+		c.validateTypeExists(field.Type)
+		if fieldNames[field.Name] {
+			c.reportError(0, 0, fmt.Sprintf("Duplicate field '%s' in struct '%s'", field.Name, s.Name))
+		}
+		fieldNames[field.Name] = true
+	}
+
+	c.exitScope()
+}
+
+func (c *Checker) checkTypeDecl(s *parser.TypeDecl) {
+	c.validateTypeExists(s.Type)
+
+	// Resolver o tipo para garantir que aliases aninhados sejam expandidos
+	resolvedType := c.resolveType(s.Type)
+
+	typeSym := &Symbol{
+		Name: s.Name,
+		Kind: KindTypeAlias,
+		Type: c.wrapType(resolvedType), // Armazenar o tipo resolvido
+		Node: s,
+	}
+
+	if !c.CurrentScope.Define(s.Name, typeSym) {
+		c.reportError(0, 0, fmt.Sprintf("Type '%s' already defined", s.Name))
+	}
+}
+
+func (c *Checker) checkImplDecl(s *parser.ImplDecl) {
+	// Verificar se o Target existe
+	sym := c.CurrentScope.Resolve(s.TargetName)
+	if sym == nil || sym.Kind != KindStruct {
+		c.reportError(0, 0, fmt.Sprintf("Cannot implement methods for unknown struct '%s'", s.TargetName))
+		return
+	}
+
+	// Simplificação: Checar os métodos como funções normais,
+	// mas injetando 'self' no escopo se necessário.
+	for _, method := range s.Methods {
+		c.checkMethodDecl(method, sym.Type)
+	}
+}
+
+func (c *Checker) checkMethodDecl(m *parser.MethodDecl, structType Type) {
+	c.enterScope()
+
+	// Definir 'self'
+	c.CurrentScope.Define("self", &Symbol{Name: "self", Kind: KindVar, Type: structType})
+
+	prevReturn := c.currentFuncReturnType
+	c.currentFuncReturnType = ToMultiValueType(m.ReturnTypes)
+
+	// Generics do método
+	if m.Generics != nil {
+		for _, g := range m.Generics {
+			c.CurrentScope.Define(g.Name, &Symbol{Name: g.Name, Kind: KindGenericParam})
+		}
+	}
+
+	// Params
+	for _, param := range m.Params {
+		c.validateTypeExists(param.Type)
+		paramType := c.wrapType(param.Type)
+		c.CurrentScope.Define(param.Name, &Symbol{Name: param.Name, Kind: KindVar, Type: paramType})
+	}
+
+	for _, stmt := range m.Body {
+		c.checkStmt(stmt)
+	}
+
+	c.currentFuncReturnType = prevReturn
+	c.exitScope()
+}
+
+func (c *Checker) checkSwitchStmt(s *parser.SwitchStmt) {
+	exprType := c.checkExpr(s.Expr)
+
+	for _, clause := range s.Cases {
+		if clause.Value != nil {
+			caseType := c.checkExpr(clause.Value)
+			if !c.areTypesCompatible(exprType, caseType) {
+				c.reportError(0, 0, fmt.Sprintf("Case type mismatch. Switch on %s, but case is %s",
+					StringifyType(exprType), StringifyType(caseType)))
+			}
+		}
+		c.checkBlockScope(clause.Body)
+	}
+}
+
+// Helpers
+func (c *Checker) checkBlockScope(stmts []parser.Stmt) {
+	c.enterScope()
+	for _, s := range stmts {
+		c.checkStmt(s)
+	}
+	c.exitScope()
+}
+
+func (c *Checker) checkBlock(stmts []parser.Stmt) {
+	c.checkBlockScope(stmts)
+}
+
+func (c *Checker) checkImportDecl(imp *parser.ImportDecl) {
+	if imp.Imports != nil {
+		for _, spec := range imp.Imports {
+			symbolName := spec.Name
+			if spec.Alias != "" {
+				symbolName = spec.Alias
+			}
+			sym := &Symbol{Name: symbolName, Kind: KindImport, Node: imp}
+			if !c.CurrentScope.Define(symbolName, sym) {
+				c.reportError(0, 0, fmt.Sprintf("Import '%s' already declared", symbolName))
+			}
+		}
+	} else {
+		path := imp.Path
+		parts := strings.Split(path, ".")
+		moduleName := parts[len(parts)-1]
+
+		sym := &Symbol{
+			Name: moduleName,
+			Kind: KindImport,
+			Node: imp,
+		}
+
+		if !c.CurrentScope.Define(moduleName, sym) {
+			c.reportError(0, 0, fmt.Sprintf("Module '%s' already declared", moduleName))
+		}
+	}
+}
+
+func (c *Checker) checkExportDecl(exp *parser.ExportDecl) {
+	for _, spec := range exp.Exports {
+		sym := c.CurrentScope.Resolve(spec.Name)
+		if sym == nil {
+			c.reportError(0, 0, fmt.Sprintf("Cannot export undeclared symbol '%s'", spec.Name))
+		}
+	}
+}
+
+func (c *Checker) validateTypeExists(t parser.Type) {
+	switch v := t.(type) {
+	case *parser.IdentifierType:
+		if c.CurrentScope.Resolve(v.Name) == nil {
+			c.reportError(0, 0, fmt.Sprintf("Unknown type '%s'", v.Name))
+		}
+	case *parser.ArrayType:
+		c.validateTypeExists(v.ElementType)
+	case *parser.PrimitiveType:
+		// Tipos primitivos sempre existem
+		return
+	case *parser.NullableType:
+		c.validateTypeExists(v.BaseType)
+	case *parser.MapType:
+		c.validateTypeExists(v.KeyType)
+		c.validateTypeExists(v.ValueType)
+	case *parser.PointerType:
+		c.validateTypeExists(v.BaseType)
+	case *parser.UnionType:
+		for _, typ := range v.Types {
+			c.validateTypeExists(typ)
+		}
+	}
+}
+
+// Helper functions
+func (c *Checker) isBooleanType(t Type) bool {
+	typeStr := StringifyType(t)
+	return typeStr == "bool" || typeStr == "bool?"
+}
+
+func (c *Checker) isConditionableType(t Type) bool {
+	if t == nil {
+		return false
+	}
+
+	typeStr := StringifyType(t)
+
+	// Tipos booleanos (com ou sem nullable)
+	if typeStr == "bool" || typeStr == "bool?" {
+		return true
+	}
+
+	// Tipos numéricos (com ou sem nullable)
+	if typeStr == "int" || typeStr == "int?" ||
+		typeStr == "float" || typeStr == "float?" {
+		return true
+	}
+
+	// Outros tipos nullable (qualquer tipo com ?)
+	if strings.HasSuffix(typeStr, "?") {
+		return true
+	}
+
+	return false
+}
+
+func (c *Checker) areTypesCompatible(target, source Type) bool {
+	// Implementação simplificada - deve usar AreParserTypesCompatible para tipos wrapped
+	if target == nil || source == nil {
+		return false
+	}
+
+	// Ambos são wrappers de parser.Type
+	if wTarget, ok := target.(*ParserTypeWrapper); ok {
+		if wSource, ok := source.(*ParserTypeWrapper); ok {
+			return AreParserTypesCompatible(wTarget.Type, wSource.Type)
+		}
+	}
+
+	// MultiValueType
+	if mTarget, ok := target.(*MultiValueType); ok {
+		if mSource, ok := source.(*MultiValueType); ok {
+			if len(mTarget.Types) != len(mSource.Types) {
+				return false
+			}
+			for i := range mTarget.Types {
+				if !c.areTypesCompatible(mTarget.Types[i], mSource.Types[i]) {
+					return false
+				}
+			}
+			return true
+		}
+		return false
+	}
+
+	// Tipos diferentes
+	return false
+}
+
+func (c *Checker) unwrapType(t Type) parser.Type {
+	if w, ok := t.(*ParserTypeWrapper); ok {
+		return w.Type
+	}
+	// Não é um tipo wrapped, retornar nil
+	return nil
+}
+
+
+package semantic
+
+import (
+	"github.com/alpha/internal/parser"
+)
+
+type Checker struct {
+	CurrentScope *Scope
+	Errors       []SemanticError
+
+	// Contexto atual
+	currentFuncReturnType Type
+	inLoop                bool
+}
+
+// checker.go - função NewChecker()
+func NewChecker() *Checker {
+	global := NewScope(nil)
+
+	// Registrar tipos primitivos básicos como aliases
+	global.Define("int", &Symbol{Name: "int", Kind: KindTypeAlias, Type: &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "int"}}})
+	global.Define("float", &Symbol{Name: "float", Kind: KindTypeAlias, Type: &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "float"}}})
+	global.Define("string", &Symbol{Name: "string", Kind: KindTypeAlias, Type: &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "string"}}})
+	global.Define("bool", &Symbol{Name: "bool", Kind: KindTypeAlias, Type: &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "bool"}}})
+	global.Define("void", &Symbol{Name: "void", Kind: KindTypeAlias, Type: &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "void"}}})
+	global.Define("any", &Symbol{Name: "any", Kind: KindTypeAlias, Type: &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "any"}}})
+
+	// Adicionar tipos nullable básicos
+	global.Define("int?", &Symbol{Name: "int?", Kind: KindTypeAlias, Type: &ParserTypeWrapper{Type: &parser.NullableType{BaseType: &parser.PrimitiveType{Name: "int"}}}})
+	global.Define("float?", &Symbol{Name: "float?", Kind: KindTypeAlias, Type: &ParserTypeWrapper{Type: &parser.NullableType{BaseType: &parser.PrimitiveType{Name: "float"}}}})
+	global.Define("bool?", &Symbol{Name: "bool?", Kind: KindTypeAlias, Type: &ParserTypeWrapper{Type: &parser.NullableType{BaseType: &parser.PrimitiveType{Name: "bool"}}}})
+	global.Define("string?", &Symbol{Name: "string?", Kind: KindTypeAlias, Type: &ParserTypeWrapper{Type: &parser.NullableType{BaseType: &parser.PrimitiveType{Name: "string"}}}})
+
+	// REGISTRAR FUNÇÕES BUILT-IN
+	// Funções de array
+	global.Define("append", &Symbol{Name: "append", Kind: KindFunction, Type: &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "void"}}})
+	global.Define("remove", &Symbol{Name: "remove", Kind: KindFunction, Type: &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "void"}}})
+	global.Define("removeIndex", &Symbol{Name: "removeIndex", Kind: KindFunction, Type: &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "void"}}})
+	global.Define("length", &Symbol{Name: "length", Kind: KindFunction, Type: &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "int"}}})
+
+	// Funções de mapa
+	global.Define("delete", &Symbol{Name: "delete", Kind: KindFunction, Type: &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "void"}}})
+	global.Define("clear", &Symbol{Name: "clear", Kind: KindFunction, Type: &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "void"}}})
+
+	// Funções de set
+	global.Define("has", &Symbol{Name: "has", Kind: KindFunction, Type: &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "bool"}}})
+	global.Define("add", &Symbol{Name: "add", Kind: KindFunction, Type: &ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "void"}}})
+
+	return &Checker{
+		CurrentScope: global,
+		Errors:       make([]SemanticError, 0),
+		inLoop:       false,
+	}
+}
+
+func (c *Checker) CheckProgram(prog *parser.Program) {
+	for _, stmt := range prog.Body {
+		c.checkStmt(stmt)
+	}
+}
+
+func (c *Checker) reportError(line, col int, msg string) {
+	c.Errors = append(c.Errors, SemanticError{
+		Msg:  msg,
+		Line: line,
+		Col:  col,
+	})
+}
+
+func (c *Checker) enterScope() {
+	c.CurrentScope = NewScope(c.CurrentScope)
+}
+
+func (c *Checker) exitScope() {
+	if c.CurrentScope.Outer != nil {
+		c.CurrentScope = c.CurrentScope.Outer
+	}
+}
+
+// Helper para converter parser.Type para semantic.Type
+func (c *Checker) wrapType(t parser.Type) Type {
+	return ToType(t)
+}
+
+func (c *Checker) resolveType(t parser.Type) parser.Type {
+	if t == nil {
+		return nil
+	}
+
+	switch v := t.(type) {
+	case *parser.IdentifierType:
+		sym := c.CurrentScope.Resolve(v.Name)
+		if sym != nil && sym.Kind == KindTypeAlias {
+			// Se for um alias, retorna o tipo subjacente
+			if wrapper, ok := sym.Type.(*ParserTypeWrapper); ok {
+				return wrapper.Type
+			}
+		}
+		// Não é um alias ou não foi encontrado
+		return t
+
+	case *parser.ArrayType:
+		return &parser.ArrayType{ElementType: c.resolveType(v.ElementType)}
+
+	case *parser.PointerType:
+		return &parser.PointerType{BaseType: c.resolveType(v.BaseType)}
+
+	case *parser.NullableType:
+		return &parser.NullableType{BaseType: c.resolveType(v.BaseType)}
+
+	case *parser.MapType:
+		return &parser.MapType{
+			KeyType:   c.resolveType(v.KeyType),
+			ValueType: c.resolveType(v.ValueType),
+		}
+
+	case *parser.UnionType:
+		types := make([]parser.Type, len(v.Types))
+		for i, typ := range v.Types {
+			types[i] = c.resolveType(typ)
+		}
+		return &parser.UnionType{Types: types}
+
+	case *parser.SetType:
+		return &parser.SetType{ElementType: c.resolveType(v.ElementType)}
+
+	case *parser.GenericType:
+		args := make([]parser.Type, len(v.TypeArgs))
+		for i, arg := range v.TypeArgs {
+			args[i] = c.resolveType(arg)
+		}
+		return &parser.GenericType{Name: v.Name, TypeArgs: args}
+
+	default:
+		// Para PrimitiveType e outros, retorna como está
+		return t
+	}
+}
+
+
+package semantic
+
+import (
+	"fmt"
+)
+
+type SemanticError struct {
+	Msg  string
+	Line int
+	Col  int
+}
+
+func (e SemanticError) Error() string {
+	return fmt.Sprintf("[Semantic Error] @ %d:%d: %s", e.Line, e.Col, e.Msg)
+}
+
+// Interface para nós que têm posição (já definida no seu parser)
+type NodeWithPos interface {
+	// Assumindo que você pode extrair linha/coluna do parser.Node
+	// Se o nodePos() for privado, você precisará de getters no parser
+	// ou passar o token correspondente.
+}
+
+
+package semantic
+
+type Scope struct {
+	Outer   *Scope             // Escopo pai (nil se for global)
+	Symbols map[string]*Symbol // Mapa de símbolos neste escopo
+}
+
+func NewScope(outer *Scope) *Scope {
+	return &Scope{
+		Outer:   outer,
+		Symbols: make(map[string]*Symbol),
+	}
+}
+
+// Define insere um símbolo no escopo ATUAL
+func (s *Scope) Define(name string, sym *Symbol) bool {
+	if _, exists := s.Symbols[name]; exists {
+		return false // Erro: Já declarado neste escopo
+	}
+	s.Symbols[name] = sym
+	return true
+}
+
+// Resolve busca recursivamente nos escopos pais
+func (s *Scope) Resolve(name string) *Symbol {
+	if sym, ok := s.Symbols[name]; ok {
+		return sym
+	}
+	if s.Outer != nil {
+		return s.Outer.Resolve(name)
+	}
+	return nil
+}
+
+
+package semantic
+
+import "github.com/alpha/internal/parser"
+
+type SymbolKind int
+
+const (
+	KindVar SymbolKind = iota
+	KindConst
+	KindFunction
+	KindStruct
+	KindTypeAlias
+	KindGenericParam
+	KindImport
+)
+
+type Symbol struct {
+	Name string
+	Kind SymbolKind
+	Type Type // Alterado para semantic.Type
+	Node parser.Node
+}
+
+
+package semantic
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/alpha/internal/parser"
+)
+
+// =================================================================
+// TIPO LOCAL PARA REPRESENTAR TIPOS (NÃO IMPLEMENTA parser.Type)
+// =================================================================
+
+// Type é nossa própria interface de tipo que pode representar tanto
+// tipos do parser quanto nossos tipos especiais
+type Type interface {
+	String() string
+	// Podemos adicionar outros métodos necessários
+}
+
+// =================================================================
+// TIPOS E CONSTANTES
+// =================================================================
+
+// MultiValueType representa múltiplos retornos (ex: string, string)
+type MultiValueType struct {
+	Types []Type
+}
+
+func (m *MultiValueType) String() string {
+	if len(m.Types) == 0 {
+		return "void"
+	}
+	parts := make([]string, len(m.Types))
+	for i, sub := range m.Types {
+		parts[i] = sub.String()
+	}
+	return strings.Join(parts, ", ")
+}
+
+// =================================================================
+// WRAPPERS para tipos do parser
+// =================================================================
+
+// ParserTypeWrapper envolve um parser.Type para implementar nossa interface Type
+type ParserTypeWrapper struct {
+	Type parser.Type
+}
+
+func (w *ParserTypeWrapper) String() string {
+	return StringifyParserType(w.Type)
+}
+
+// =================================================================
+// FUNÇÕES AUXILIARES
+// =================================================================
+
+// ToType converte um parser.Type em nosso Type
+func ToType(t parser.Type) Type {
+	if t == nil {
+		return &ParserTypeWrapper{Type: t}
+	}
+	return &ParserTypeWrapper{Type: t}
+}
+
+// ToMultiValueType converte uma lista de parser.Type em MultiValueType
+func ToMultiValueType(types []parser.Type) Type {
+	if len(types) == 1 {
+		return ToType(types[0])
+	}
+
+	wrappedTypes := make([]Type, len(types))
+	for i, t := range types {
+		wrappedTypes[i] = ToType(t)
+	}
+	return &MultiValueType{Types: wrappedTypes}
+}
+
+// StringifyParserType converte um parser.Type em string
+func StringifyParserType(t parser.Type) string {
+	if t == nil {
+		return "void"
+	}
+
+	switch v := t.(type) {
+	case *parser.PrimitiveType:
+		return v.Name
+	case *parser.IdentifierType:
+		return v.Name
+	case *parser.ArrayType:
+		return StringifyParserType(v.ElementType) + "[]"
+	case *parser.PointerType:
+		return "*" + StringifyParserType(v.BaseType)
+	case *parser.NullableType:
+		return StringifyParserType(v.BaseType) + "?"
+	case *parser.MapType:
+		return fmt.Sprintf("map<%s, %s>",
+			StringifyParserType(v.KeyType),
+			StringifyParserType(v.ValueType))
+	case *parser.UnionType:
+		typeStrings := make([]string, len(v.Types))
+		for i, typ := range v.Types {
+			typeStrings[i] = StringifyParserType(typ)
+		}
+		return strings.Join(typeStrings, " | ")
+	case *parser.SetType:
+		return fmt.Sprintf("set<%s>", StringifyParserType(v.ElementType))
+	case *parser.GenericType:
+		if len(v.TypeArgs) == 0 {
+			return v.Name
+		}
+		args := make([]string, len(v.TypeArgs))
+		for i, arg := range v.TypeArgs {
+			args[i] = StringifyParserType(arg)
+		}
+		return fmt.Sprintf("%s<%s>", v.Name, strings.Join(args, ", "))
+	default:
+		return "unknown"
+	}
+}
+
+// =================================================================
+// FUNÇÕES DE COMPATIBILIDADE
+// =================================================================
+
+func AreTypesCompatible(target, source Type) bool {
+	if target == nil || source == nil {
+		return false
+	}
+
+	// Primeiro verificar compatibilidade genérica
+	if areGenericTypesCompatible(target, source) {
+		return true
+	}
+
+	// Ambos são wrappers de parser.Type
+	if wTarget, ok := target.(*ParserTypeWrapper); ok {
+		if wSource, ok := source.(*ParserTypeWrapper); ok {
+			// Verificar se algum é UnionType
+			if unionTarget, ok := wTarget.Type.(*parser.UnionType); ok {
+				// Target é união, verificar se source é compatível com algum dos tipos
+				for _, typ := range unionTarget.Types {
+					if AreParserTypesCompatible(typ, wSource.Type) {
+						return true
+					}
+				}
+				return false
+			}
+
+			if unionSource, ok := wSource.Type.(*parser.UnionType); ok {
+				// Source é união, verificar se target é compatível com algum dos tipos
+				for _, typ := range unionSource.Types {
+					if AreParserTypesCompatible(wTarget.Type, typ) {
+						return true
+					}
+				}
+				return false
+			}
+
+			return AreParserTypesCompatible(wTarget.Type, wSource.Type)
+		}
+	}
+
+	// MultiValueType
+	if mTarget, ok := target.(*MultiValueType); ok {
+		if mSource, ok := source.(*MultiValueType); ok {
+			if len(mTarget.Types) != len(mSource.Types) {
+				return false
+			}
+			for i := range mTarget.Types {
+				if !AreTypesCompatible(mTarget.Types[i], mSource.Types[i]) {
+					return false
+				}
+			}
+			return true
+		}
+		// Tentar comparar MultiValueType de um único elemento com tipo simples
+		if len(mTarget.Types) == 1 {
+			return AreTypesCompatible(mTarget.Types[0], source)
+		}
+		return false
+	}
+
+	// Tentar comparar tipo simples com MultiValueType de um único elemento
+	if mSource, ok := source.(*MultiValueType); ok {
+		if len(mSource.Types) == 1 {
+			return AreTypesCompatible(target, mSource.Types[0])
+		}
+		return false
+	}
+
+	return false
+}
+
+// AreParserTypesCompatible verifica compatibilidade entre parser.Types
+func AreParserTypesCompatible(target, source parser.Type) bool {
+	if target == nil || source == nil {
+		return false
+	}
+
+	targetStr := StringifyParserType(target)
+	sourceStr := StringifyParserType(source)
+
+	if sourceStr == "any" || targetStr == "any" {
+		return true
+	}
+
+	if targetStr == "error" || sourceStr == "error" {
+		return true
+	}
+
+	// Se são exatamente iguais
+	if targetStr == sourceStr {
+		return true
+	}
+
+	// Caso especial: compatibilidade de arrays
+	if tArr, ok := target.(*parser.ArrayType); ok {
+		if sArr, ok := source.(*parser.ArrayType); ok {
+			// Permitir any[] para string[] e vice-versa
+			if targetStr == "any[]" || sourceStr == "any[]" {
+				return true
+			}
+			// Verificar compatibilidade dos tipos de elemento
+			return AreParserTypesCompatible(tArr.ElementType, sArr.ElementType)
+		}
+		// Permitir any[] para qualquer array
+		if targetStr == "any[]" && strings.HasSuffix(sourceStr, "[]") {
+			return true
+		}
+		// Permitir qualquer array para any[]
+		if sourceStr == "any[]" && strings.HasSuffix(targetStr, "[]") {
+			return true
+		}
+	}
+
+	// Caso especial para spread arrays: any[] pode ser atribuído a string[]
+	if targetStr == "string[]" && sourceStr == "any[]" {
+		return true
+	}
+
+	// 1. Target é Identificador (Raw Type) e Source é Genérico (Especializado)
+	// Ex: var c Car = generic<string> Car {...}
+	if tIdent, ok := target.(*parser.IdentifierType); ok {
+		if sGeneric, ok := source.(*parser.GenericType); ok {
+			return tIdent.Name == sGeneric.Name
+		}
+	}
+
+	// 2. Target é Genérico e Source é Identificador (Raw Type)
+	// Menos comum, mas possível se inicializar sem generics explícitos
+	if tGeneric, ok := target.(*parser.GenericType); ok {
+		if sIdent, ok := source.(*parser.IdentifierType); ok {
+			return tGeneric.Name == sIdent.Name
+		}
+	}
+
+	// 3. Comparação Genérico vs Genérico
+	if tGeneric, ok := target.(*parser.GenericType); ok {
+		if sGeneric, ok := source.(*parser.GenericType); ok {
+			if tGeneric.Name != sGeneric.Name {
+				return false
+			}
+			// Se target não tem argumentos (raw), aceita
+			if len(tGeneric.TypeArgs) == 0 {
+				return true
+			}
+			if len(tGeneric.TypeArgs) != len(sGeneric.TypeArgs) {
+				return false
+			}
+			for i := range tGeneric.TypeArgs {
+				if !AreParserTypesCompatible(tGeneric.TypeArgs[i], sGeneric.TypeArgs[i]) {
+					return false
+				}
+			}
+			return true
+		}
+	}
+	// =====================================================
+
+	// Se target for UnionType
+	if unionTarget, ok := target.(*parser.UnionType); ok {
+		for _, typ := range unionTarget.Types {
+			if AreParserTypesCompatible(typ, source) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Se source for UnionType
+	if unionSource, ok := source.(*parser.UnionType); ok {
+		for _, typ := range unionSource.Types {
+			if AreParserTypesCompatible(target, typ) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Conversões numéricas implícitas e nullables
+	if targetStr == "float" && sourceStr == "int" {
+		return true
+	}
+	if targetStr == "int?" && sourceStr == "int" {
+		return true
+	}
+	if targetStr == "int" && sourceStr == "int?" {
+		return true
+	}
+	if targetStr == "float?" && sourceStr == "float" {
+		return true
+	}
+	if targetStr == "float" && sourceStr == "float?" {
+		return true
+	}
+	if targetStr == "bool?" && sourceStr == "bool" {
+		return true
+	}
+	if targetStr == "bool" && sourceStr == "bool?" {
+		return true
+	}
+
+	return false
+}
+
+// =================================================================
+// FUNÇÕES ORIGINAIS (AGORA USANDO NOSSA INTERFACE)
+// =================================================================
+
+// StringifyType converte nosso Type em string
+func StringifyType(t Type) string {
+	if t == nil {
+		return "void"
+	}
+	return t.String()
+}
+
+// isGenericTypeName verifica se um nome de tipo é genérico (letra maiúscula)
+func IsGenericTypeName(name string) bool {
+	if len(name) == 1 {
+		ch := name[0]
+		return ch >= 'A' && ch <= 'Z'
+	}
+	return false
+}
+
+// GetBaseTypeName obtém o nome base de um tipo (remove modificadores)
+func GetBaseTypeName(t Type) string {
+	if t == nil {
+		return ""
+	}
+
+	typeStr := StringifyType(t)
+
+	// Remover modificadores: ?, *, []
+	if strings.HasSuffix(typeStr, "?") {
+		typeStr = typeStr[:len(typeStr)-1]
+	}
+	if strings.HasPrefix(typeStr, "*") {
+		typeStr = typeStr[1:]
+	}
+	if strings.HasSuffix(typeStr, "[]") {
+		typeStr = typeStr[:len(typeStr)-2]
+	}
+
+	return typeStr
+}
+
+// areGenericTypesCompatible verifica compatibilidade quando envolvem tipos genéricos
+func areGenericTypesCompatible(target, source Type) bool {
+	targetStr := StringifyType(target)
+	sourceStr := StringifyType(source)
+
+	// Se algum for genérico, permitir mais flexibilidade
+	if IsGenericTypeName(targetStr) || IsGenericTypeName(sourceStr) {
+		// Para operações aritméticas, genéricos podem ser compatíveis com numéricos
+		if targetStr == "int" || targetStr == "float" {
+			return sourceStr == "int" || sourceStr == "float" || IsGenericTypeName(sourceStr)
+		}
+		if sourceStr == "int" || sourceStr == "string" {
+			return targetStr == "int" || targetStr == "float" || IsGenericTypeName(targetStr)
+		}
+		// Dois genéricos são sempre compatíveis (serão resolvidos na instanciação)
+		if IsGenericTypeName(targetStr) && IsGenericTypeName(sourceStr) {
+			return true
+		}
+	}
+
+	return false
+}

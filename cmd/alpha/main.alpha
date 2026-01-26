@@ -1,33 +1,44 @@
-package cond
+package variables
 
-var a = 10
-int? b
-const c = true
+int num
+int num1 = 10
+var num2 = 20
+const num3 = 30
 
-int sum
+int? num4 // null
+int? num5 = 10
 
-if(b) {
-    sum++
-} else {
-    sum--
+string[2] arr
+string[2] arr2 = ["Hello", "World"]
+var arr3 = ["Hello", "World"] // string[2] 
+string[] linked = [...arr3]
+append(&linked, "!", "Uau")
+remove(&linked, "!")
+removeIndex(&linked, 0)
+int linkedLen = length(linked)
+
+bool ifLogged = true
+
+int hello = 30
+int* helloPointer = &hello
+
+map<int, string> mapTest = map<int, string>{
+    1: "Hello",
+    2: "Bye",
 }
+mapTest[3] = "Hi"
+delete(&mapTest, 3)
+int mapLen = length(mapTest)
+clear(&mapTest)
 
-if(a) {
-    sum++
-} else if (!c) {
-    sum--
-} else {
-    sum -= 2
-}
+var setTest = set<int> {1, 2, 3, 4}
+bool has4 = has(setTest, 4)
+add(&setTest, 7)
+delete(&setTest, 7)
+clear(&setTest)
+int setLen = length(setTest)
 
-switch(sum) {
-    case 1:
-        sum++
-    case 2:
-        sum--
-    default:
-        sum = 0
-}
 
-// Ternary
-a = b == 10 ? 1000 : -1000
+// Union types
+string | float types2 // ""
+types2 = 3.1415

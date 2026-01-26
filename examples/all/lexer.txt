@@ -1,153 +1,5 @@
 package lexer
 
-import (
-	"bytes"
-)
-
-// ============================
-// TIPOS E CONSTANTES
-// ============================
-
-type TokenType int
-
-const (
-	EOF TokenType = iota
-	ERROR
-	KEYWORD
-	IDENT
-	INT
-	FLOAT
-	STRING
-	OP
-	GENERIC // T, U, etc. (parâmetros genéricos)
-)
-
-type Token struct {
-	Type   TokenType
-	Lexeme string // texto bruto
-	Value  string // valor normalizado (p.ex. string sem aspas)
-	Line   int
-	Col    int
-}
-
-// ============================
-// PALAVRAS-CHAVE
-// ============================
-
-var keywords = map[string]struct{}{
-	// Tipos primitivos
-	"int": {}, "string": {}, "float": {}, "bool": {}, "void": {},
-	"byte": {}, "char": {}, "double": {}, "error": {}, "component": {},
-
-	// Declarações
-	"var": {}, "const": {}, "function": {}, "type": {}, "enum": {},
-	"struct": {},
-
-	// Controle de fluxo
-	"if": {}, "else": {}, "while": {}, "do": {}, "for": {}, "in": {}, "return": {},
-	"break": {}, "continue": {}, "switch": {}, "case": {}, "default": {},
-
-	// Literais e valores
-	"true": {}, "false": {}, "null": {},
-
-	// Módulos
-	"import": {}, "export": {}, "package": {}, "from": {}, "as": {},
-
-	// Modificadores
-	"implement": {}, "init": {}, "self": {}, "public": {}, "private": {},
-
-	// Utilitários
-	"generic": {}, "length": {}, "append": {}, "remove": {}, "removeIndex": {},
-}
-
-// ============================
-// OPERADORES
-// ============================
-
-var (
-	twoCharOps = map[string]bool{
-		"==": true, "!=": true, "<=": true, ">=": true,
-		"&&": true, "||": true, "++": true, "--": true,
-		"+=": true, "-=": true, "*=": true, "/=": true,
-	}
-
-	oneCharOps = map[byte]bool{
-		'+': true, '-': true, '*': true, '/': true,
-		'%': true, '=': true, '!': true, '&': true,
-		'|': true, ';': true, ',': true, '.': true,
-		':': true, '(': true, ')': true, '{': true,
-		'}': true, '[': true, ']': true, '<': true,
-		'>': true, '?': true,
-	}
-)
-
-// ============================
-// SCANNER
-// ============================
-
-type Scanner struct {
-	src           []byte
-	index         int       // próximo byte a ler
-	start         int       // início do token corrente
-	line          int       // linha atual (1-based)
-	col           int       // coluna atual (1-based)
-	tokenLine     int       // linha onde token corrente começou
-	tokenCol      int       // coluna onde token corrente começou
-	lastTokenType TokenType // último token emitido
-}
-
-func NewScanner(src string) *Scanner {
-	b := []byte(src)
-	return &Scanner{
-		src:   b,
-		index: 0,
-		line:  1,
-		col:   1,
-	}
-}
-
-// ============================
-// FUNÇÕES AUXILIARES DO SCANNER
-// ============================
-
-func (s *Scanner) isEOF() bool { return s.index >= len(s.src) }
-
-func (s *Scanner) peek(off int) byte {
-	i := s.index + off
-	if i >= 0 && i < len(s.src) {
-		return s.src[i]
-	}
-	return 0
-}
-
-func (s *Scanner) advance() {
-	if s.isEOF() {
-		return
-	}
-
-	ch := s.src[s.index]
-	s.index++
-
-	switch ch {
-	case '\n':
-		s.line++
-		s.col = 1
-	case '\r':
-		// Tratar \r\n como uma única quebra de linha
-		if s.index < len(s.src) && s.src[s.index] == '\n' {
-			s.index++
-		}
-		s.line++
-		s.col = 1
-	default:
-		s.col++
-	}
-}
-
-// ============================
-// EMISSÃO DE TOKENS
-// ============================
-
 func (s *Scanner) emit(t TokenType) Token {
 	tok := Token{
 		Type:   t,
@@ -176,9 +28,23 @@ func (s *Scanner) errorToken(msg string) Token {
 	}
 }
 
-// ============================
-// FUNÇÕES DE LEXING PRINCIPAIS
-// ============================
+// LexAll retorna todos tokens (útil em testes)
+func LexAll(src string) []Token {
+	sc := NewScanner(src)
+	out := make([]Token, 0, 64)
+
+	for {
+		t := sc.NextToken()
+		out = append(out, t)
+		if t.Type == EOF || t.Type == ERROR {
+			break
+		}
+	}
+
+	return out
+}
+
+package lexer
 
 func (s *Scanner) NextToken() Token {
 	s.skipSpaceAndComments()
@@ -205,10 +71,7 @@ func (s *Scanner) NextToken() Token {
 	}
 }
 
-// ============================
-// SKIP DE ESPAÇOS E COMENTÁRIOS
-// ============================
-
+// skipSpaceAndComments ignora espaços e comentários (// e /* */)
 func (s *Scanner) skipSpaceAndComments() {
 	for !s.isEOF() {
 		ch := s.peek(0)
@@ -253,9 +116,25 @@ func (s *Scanner) skipBlockComment() {
 	}
 }
 
-// ============================
-// LEXING DE IDENTIFICADORES
-// ============================
+
+package lexer
+
+var (
+	twoCharOps = map[string]bool{
+		"==": true, "!=": true, "<=": true, ">=": true,
+		"&&": true, "||": true, "++": true, "--": true,
+		"+=": true, "-=": true, "*=": true, "/=": true,
+	}
+
+	oneCharOps = map[byte]bool{
+		'+': true, '-': true, '*': true, '/': true,
+		'%': true, '=': true, '!': true, '&': true,
+		'|': true, ';': true, ',': true, '.': true,
+		':': true, '(': true, ')': true, '{': true,
+		'}': true, '[': true, ']': true, '<': true,
+		'>': true, '?': true,
+	}
+)
 
 func (s *Scanner) lexIdentifier() Token {
 	// Consome letras, dígitos e underscore
@@ -277,10 +156,6 @@ func (s *Scanner) lexIdentifier() Token {
 
 	return s.emit(IDENT)
 }
-
-// ============================
-// LEXING DE NÚMEROS
-// ============================
 
 func (s *Scanner) lexNumber() Token {
 	// Parte inteira
@@ -333,10 +208,6 @@ func (s *Scanner) parseExponent() bool {
 	return true
 }
 
-// ============================
-// LEXING DE STRINGS
-// ============================
-
 func (s *Scanner) lexString() Token {
 	s.advance() // consume opening "
 
@@ -353,10 +224,6 @@ func (s *Scanner) lexString() Token {
 
 	return s.errorToken("unterminated string")
 }
-
-// ============================
-// LEXING DE OPERADORES
-// ============================
 
 func (s *Scanner) lexOperator() Token {
 	ch1 := s.peek(0)
@@ -386,6 +253,7 @@ func (s *Scanner) lexOperator() Token {
 	return s.errorToken("operador não reconhecido: " + string(ch1))
 }
 
+// isLikelyGeneric verifica se o próximo '<' provavelmente inicia um tipo genérico
 func (s *Scanner) isLikelyGeneric() bool {
 	// Olha para trás para verificar se há uma palavra-chave que indica genéricos
 	if s.index == 0 {
@@ -430,9 +298,120 @@ func (s *Scanner) isLikelyGeneric() bool {
 	return false
 }
 
-// ============================
-// FUNÇÕES UTILITÁRIAS
-// ============================
+
+package lexer
+
+// Scanner []byte
+type Scanner struct {
+	src           []byte
+	index         int       // próximo byte a ler
+	start         int       // início do token corrente
+	line          int       // linha atual (1-based)
+	col           int       // coluna atual (1-based)
+	tokenLine     int       // linha onde token corrente começou
+	tokenCol      int       // coluna onde token corrente começou
+	lastTokenType TokenType // último token emitido
+}
+
+func NewScanner(src string) *Scanner {
+	b := []byte(src)
+	return &Scanner{
+		src:   b,
+		index: 0,
+		line:  1,
+		col:   1,
+	}
+}
+
+func (s *Scanner) isEOF() bool { return s.index >= len(s.src) }
+
+func (s *Scanner) peek(off int) byte {
+	i := s.index + off
+	if i >= 0 && i < len(s.src) {
+		return s.src[i]
+	}
+	return 0
+}
+
+func (s *Scanner) advance() {
+	if s.isEOF() {
+		return
+	}
+
+	ch := s.src[s.index]
+	s.index++
+
+	switch ch {
+	case '\n':
+		s.line++
+		s.col = 1
+	case '\r':
+		// Tratar \r\n como uma única quebra de linha
+		if s.index < len(s.src) && s.src[s.index] == '\n' {
+			s.index++
+		}
+		s.line++
+		s.col = 1
+	default:
+		s.col++
+	}
+}
+
+
+package lexer
+
+type TokenType int
+
+const (
+	EOF TokenType = iota
+	ERROR
+	KEYWORD
+	IDENT
+	INT
+	FLOAT
+	STRING
+	OP
+	GENERIC // T, U, etc. (parâmetros genéricos)
+)
+
+type Token struct {
+	Type   TokenType
+	Lexeme string // texto bruto
+	Value  string // valor normalizado (p.ex. string sem aspas)
+	Line   int
+	Col    int
+}
+
+var keywords = map[string]struct{}{
+	// Tipos primitivos
+	"int": {}, "string": {}, "float": {}, "bool": {}, "void": {},
+	"byte": {}, "char": {}, "double": {}, "error": {}, "component": {},
+
+	// Declarações
+	"var": {}, "const": {}, "function": {}, "type": {}, "enum": {},
+	"struct": {},
+	// Controle de fluxo
+	"if": {}, "else": {}, "while": {}, "do": {}, "for": {}, "in": {}, "return": {},
+	"break": {}, "continue": {}, "switch": {}, "case": {}, "default": {},
+
+	// Literais e valores
+	"true": {}, "false": {}, "null": {},
+
+	// Módulos
+	"import": {}, "export": {}, "package": {}, "from": {}, "as": {},
+
+	// Modificadores
+	"implement": {}, "init": {}, "self": {}, "public": {}, "private": {},
+
+	// Utilitários
+	"generic": {}, "length": {}, "append": {}, "remove": {}, "removeIndex": {},
+	"delete": {}, "add": {}, "clear": {},
+}
+
+
+package lexer
+
+import "bytes"
 
 func isLetter(ch byte) bool {
 	return ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z'

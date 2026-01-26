@@ -11,11 +11,12 @@ const (
 	KindStruct
 	KindTypeAlias
 	KindGenericParam
+	KindImport
 )
 
 type Symbol struct {
 	Name string
 	Kind SymbolKind
-	Type parser.Type // O tipo declarado (AST Node)
-	Node parser.Node // Referência ao nó da declaração (para erros)
+	Type Type // Alterado para semantic.Type
+	Node parser.Node
 }

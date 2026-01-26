@@ -12,7 +12,7 @@ if(b) {
     sum--
 }
 
-if(typeof(a) == int) {
+if(a) {
     sum++
 } else if (!c) {
     sum--

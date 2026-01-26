@@ -79,7 +79,6 @@ func (p *Parser) parseSingleType() Type {
 	var typ Type
 	switch p.cur.Lexeme {
 	case "set", "map":
-		// CORREÇÃO: Salvar o nome, avançar o token e então chamar parseGenericType
 		name := p.cur.Lexeme
 		p.advanceToken()
 		typ = p.parseGenericType(name)
@@ -242,4 +241,27 @@ func (p *Parser) parseArrayType(elementType Type) Type {
 	}
 
 	return &ArrayType{ElementType: elementType, Size: size}
+}
+
+// parseReturnTypeList analisa um ou mais tipos de retorno (T1, T2)
+func (p *Parser) parseReturnTypeList() []Type {
+	types := make([]Type, 0, 1)
+
+	firstType := p.parseType()
+	if firstType == nil {
+		return nil
+	}
+	types = append(types, firstType)
+
+	for p.cur.Lexeme == "," {
+		p.advanceToken()
+		nextType := p.parseType()
+		if nextType == nil {
+			p.errorf("expected type after ',' in return list")
+			return nil
+		}
+		types = append(types, nextType)
+	}
+
+	return types
 }

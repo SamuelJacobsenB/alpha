@@ -11,7 +11,11 @@ int? num5 = 10
 string[2] arr
 string[2] arr2 = ["Hello", "World"]
 var arr3 = ["Hello", "World"] // string[2] 
-string[] linked
+string[] linked = [...arr3]
+append(&linked, "!", "Uau")
+remove(&linked, "!")
+removeIndex(&linked, 0)
+int linkedLen = length(linked)
 
 bool ifLogged = true
 
@@ -22,7 +26,19 @@ map<int, string> mapTest = map<int, string>{
     1: "Hello",
     2: "Bye",
 }
+mapTest[3] = "Hi"
+delete(&mapTest, 3)
+int mapLen = length(mapTest)
+clear(&mapTest)
+
+var setTest = set<int> {1, 2, 3, 4}
+bool has4 = has(setTest, 4)
+add(&setTest, 7)
+delete(&setTest, 7)
+clear(&setTest)
+int setLen = length(setTest)
+
 
 // Union types
 string | float types2 // ""
-types2 = 3,1415
+types2 = 3.1415

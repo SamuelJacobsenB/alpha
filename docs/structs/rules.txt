@@ -1,5 +1,5 @@
 - Tipos:
-byte, char, string, int, float, double, boolean, error, component, void, null
+byte, char, string, int, float, double, bool, error, component, void, null
 
 -----------------------------------------------------------
 
