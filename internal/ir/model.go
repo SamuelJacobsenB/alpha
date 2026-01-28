@@ -102,6 +102,7 @@ type Instruction struct {
 	Arg1   *Operand
 	Arg2   *Operand
 	Result *Operand
+	Args   [](*Operand) // Para instruções com número variável de argumentos (ex: CALL)
 	// Metadados adicionais para debug ou backend específico
 	Line int
 }
@@ -157,6 +158,7 @@ type BasicBlock struct {
 // Function representa uma função compilada no IR
 type Function struct {
 	Name         string
+	Receiver     string
 	Params       []*Operand
 	Instructions []*Instruction // Representação linear
 	TempCount    int            // Contador para variáveis temporárias
@@ -168,6 +170,7 @@ type Function struct {
 // Module representa o programa inteiro (pacote)
 type Module struct {
 	Name      string
+	Imports   []string
 	Globals   []*Instruction // Inicialização de globais
 	Functions []*Function
 	Structs   []*parser.StructDecl // Metadados de structs para backend

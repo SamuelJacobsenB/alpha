@@ -1,6 +1,98 @@
 package ir
 
 import (
+	"fmt"
+
+	"github.com/alpha/internal/semantic"
+)
+
+type IRBuilder struct {
+	CurrentFunc *Function
+	Module      *Module
+}
+
+func NewBuilder(mod *Module) *IRBuilder {
+	return &IRBuilder{Module: mod}
+}
+
+// ============================
+// Gerenciamento de Temporários e Labels
+// ============================
+
+func (b *IRBuilder) NewTemp(t semantic.Type) *Operand {
+	id := b.CurrentFunc.TempCount
+	b.CurrentFunc.TempCount++
+	return &Operand{
+		Kind:  OpTemp,
+		Value: fmt.Sprintf("t%d", id),
+		Type:  t,
+	}
+}
+
+func (b *IRBuilder) NewLabel(prefix string) *Operand {
+	id := b.CurrentFunc.LabelCount
+	b.CurrentFunc.LabelCount++
+	return &Operand{
+		Kind:  OpLabel,
+		Value: fmt.Sprintf("%s_%d", prefix, id),
+	}
+}
+
+func (b *IRBuilder) Emit(op OpCode, arg1, arg2, result *Operand) *Instruction {
+	instr := &Instruction{
+		Op:     op,
+		Arg1:   arg1,
+		Arg2:   arg2,
+		Result: result,
+	}
+	b.CurrentFunc.Instructions = append(b.CurrentFunc.Instructions, instr)
+	return instr
+}
+
+func (b *IRBuilder) EmitLabel(label *Operand) {
+	b.Emit(LABEL, label, nil, nil)
+}
+
+func (b *IRBuilder) EmitJump(label *Operand) {
+	b.Emit(JMP, label, nil, nil)
+}
+
+func (b *IRBuilder) EmitCondJump(cond, trueLabel, falseLabel *Operand) {
+	// Otimização: Se tivermos condicional simples, usamos JMP_FALSE
+	// Normalmente TAC usa "if false goto L"
+	if falseLabel != nil {
+		b.Emit(JMP_FALSE, cond, falseLabel, nil)
+	}
+	if trueLabel != nil {
+		b.Emit(JMP_TRUE, cond, trueLabel, nil)
+	}
+}
+
+// ============================
+// Helpers de Operandos
+// ============================
+
+func Literal(val string, t semantic.Type) *Operand {
+	return &Operand{Kind: OpLiteral, Value: val, Type: t}
+}
+
+func Var(name string, t semantic.Type) *Operand {
+	return &Operand{Kind: OpVar, Value: name, Type: t}
+}
+
+func IntLiteral(val int64) *Operand {
+	// Assume semantic.IntType disponível ou cria wrapper
+	return &Operand{Kind: OpLiteral, Value: fmt.Sprintf("%d", val), Type: nil}
+}
+
+func BoolLiteral(val bool) *Operand {
+	return &Operand{Kind: OpLiteral, Value: fmt.Sprintf("%t", val), Type: nil}
+}
+
+
+package ir
+
+import (
 	"github.com/alpha/internal/parser"
 	"github.com/alpha/internal/semantic"
 )
@@ -341,11 +433,21 @@ func (g *Generator) genCallExpr(e *parser.CallExpr) *Operand {
 		callee = g.genExpr(e.Callee) // Ponteiro de função
 	}
 
+	// Emitir PARAM instructions ou passar lista no CALL
+	// Simulação de PARAM instructions (estilo assembly)
+	for i := len(args) - 1; i >= 0; i-- {
+		// PUSH param (opcional, dependendo do backend)
+	}
+
 	result := g.builder.NewTemp(nil)
 
-	instr := g.builder.Emit(CALL, callee, nil, result)
-	instr.Args = args
+	// Codificar argumentos na instrução CALL para simplificar TAC
+	// Hack: Usamos Value do Arg1 para armazenar lista de argumentos ou criamos instrução customizada
+	// Aqui emitiremos uma sequência
 
+	instr := g.builder.Emit(CALL, callee, nil, result)
+	// Para um IR mais robusto, Instruction teria lista de Args, mas aqui vamos simular
+	// anexando metadados ou assumindo que o backend olha para as instruções anteriores
 	_ = instr // evitar unused
 
 	return result
@@ -456,4 +558,257 @@ func isExported(name string) bool {
 		return name[0] >= 'A' && name[0] <= 'Z'
 	}
 	return false
+}
+
+
+package ir
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/alpha/internal/parser"
+	"github.com/alpha/internal/semantic"
+)
+
+// OpCode representa a operação a ser executada
+type OpCode int
+
+const (
+	// Aritmética e Lógica
+	ADD OpCode = iota
+	SUB
+	MUL
+	DIV
+	MOD
+	AND
+	OR
+	XOR
+	SHL
+	SHR
+
+	// Comparação
+	EQ
+	NEQ
+	LT
+	GT
+	LE
+	GE
+
+	// Memória e Atribuição
+	MOV       // t1 = t2
+	LOAD      // t1 = *t2
+	STORE     // *t1 = t2
+	ALLOCA    // t1 = alloc type
+	GET_FIELD // t1 = t2.field (offset calculation)
+	GET_INDEX // t1 = t2[t3]
+	GET_ADDR  // t1 = &t2
+
+	// Controle de Fluxo
+	LABEL     // Definição de label
+	JMP       // Pulo incondicional
+	JMP_TRUE  // Pulo se verdadeiro
+	JMP_FALSE // Pulo se falso
+	CALL      // Chamada de função
+	RET       // Retorno de função
+	PHI       // Para SSA (opcional, incluído para extensibilidade)
+
+	// Built-ins e Especiais
+	LEN        // t1 = len(t2)
+	APPEND     // t1 = append(t1, t2)
+	MAKE_SLICE // t1 = make([]T, len)
+	MAKE_MAP   // t1 = make(map[K]V)
+	CAST       // t1 = type(t2)
+	NOP        // No Operation
+)
+
+// OperandType define o tipo do operando
+type OperandType int
+
+const (
+	OpVar      OperandType = iota // Variável do usuário
+	OpTemp                        // Variável temporária do compilador (%t1)
+	OpLiteral                     // Literal (número, string)
+	OpLabel                       // Label de salto (.L1)
+	OpFunction                    // Nome de função
+	OpType                        // Referência a tipo (para allocs)
+	OpField                       // Nome de campo de struct
+)
+
+// Operand representa um argumento de uma instrução
+type Operand struct {
+	Kind  OperandType
+	Value string        // Representação string do valor
+	Type  semantic.Type // Tipo semântico associado (para backend)
+}
+
+func (o Operand) String() string {
+	switch o.Kind {
+	case OpTemp:
+		return "%" + o.Value
+	case OpLabel:
+		return "." + o.Value
+	case OpLiteral:
+		if o.Type != nil && strings.Contains(semantic.StringifyType(o.Type), "string") {
+			return `"` + o.Value + `"`
+		}
+		return o.Value
+	default:
+		return o.Value
+	}
+}
+
+// Instruction representa uma linha de código no IR (Quadruple)
+// Formato: Result = Op Arg1, Arg2
+type Instruction struct {
+	Op     OpCode
+	Arg1   *Operand
+	Arg2   *Operand
+	Result *Operand
+	// Metadados adicionais para debug ou backend específico
+	Line int
+}
+
+func (i *Instruction) String() string {
+	opStr := i.opToString()
+
+	if i.Op == LABEL {
+		return fmt.Sprintf("%s:", i.Arg1)
+	}
+
+	var sb strings.Builder
+	if i.Result != nil {
+		sb.WriteString(fmt.Sprintf("%s = ", i.Result))
+	}
+
+	sb.WriteString(opStr)
+
+	if i.Arg1 != nil {
+		sb.WriteString(" ")
+		sb.WriteString(i.Arg1.String())
+	}
+	if i.Arg2 != nil {
+		sb.WriteString(", ")
+		sb.WriteString(i.Arg2.String())
+	}
+	return sb.String()
+}
+
+func (i *Instruction) opToString() string {
+	// Mapeamento simples para debug
+	names := []string{
+		"ADD", "SUB", "MUL", "DIV", "MOD", "AND", "OR", "XOR", "SHL", "SHR",
+		"EQ", "NEQ", "LT", "GT", "LE", "GE",
+		"MOV", "LOAD", "STORE", "ALLOCA", "GET_FIELD", "GET_INDEX", "GET_ADDR",
+		"LABEL", "JMP", "JMP_TRUE", "JMP_FALSE", "CALL", "RET", "PHI",
+		"LEN", "APPEND", "MAKE_SLICE", "MAKE_MAP", "CAST", "NOP",
+	}
+	if int(i.Op) < len(names) {
+		return names[i.Op]
+	}
+	return "UNKNOWN"
+}
+
+// BasicBlock representa uma sequência linear de instruções
+type BasicBlock struct {
+	Label        string
+	Instructions []*Instruction
+	Predecessors []*BasicBlock
+	Successors   []*BasicBlock
+}
+
+// Function representa uma função compilada no IR
+type Function struct {
+	Name         string
+	Params       []*Operand
+	Instructions []*Instruction // Representação linear
+	TempCount    int            // Contador para variáveis temporárias
+	LabelCount   int            // Contador para labels
+	ReturnType   semantic.Type
+	IsExported   bool
+}
+
+// Module representa o programa inteiro (pacote)
+type Module struct {
+	Name      string
+	Globals   []*Instruction // Inicialização de globais
+	Functions []*Function
+	Structs   []*parser.StructDecl // Metadados de structs para backend
+}
+
+package ir
+
+import (
+	"fmt"
+	"strconv"
+)
+
+// Optimizer orquestra as transformações no IR
+type Optimizer struct {
+	Module *Module // Referência ao módulo definido em ir.txt
+}
+
+func NewOptimizer(mod *Module) *Optimizer {
+	return &Optimizer{Module: mod}
+}
+
+// Optimize percorre todas as funções do módulo para aplicar melhorias
+func (o *Optimizer) Optimize() {
+	for _, fn := range o.Module.Functions {
+		o.ConstantFolding(fn)
+		o.EliminateUnreachableCode(fn)
+	}
+}
+
+// ConstantFolding simplifica expressões matemáticas com literais
+func (o *Optimizer) ConstantFolding(fn *Function) {
+	for _, instr := range fn.Instructions {
+		// Verifica se os argumentos são do tipo OpLiteral [cite: 20]
+		if instr.Arg1 != nil && instr.Arg1.Kind == OpLiteral &&
+			instr.Arg2 != nil && instr.Arg2.Kind == OpLiteral {
+
+			val1, _ := strconv.ParseInt(instr.Arg1.Value, 10, 64)
+			val2, _ := strconv.ParseInt(instr.Arg2.Value, 10, 64)
+			var result int64
+
+			switch instr.Op {
+			case ADD: // Definido no seu iota de OpCode [cite: 18]
+				result = val1 + val2
+			case SUB:
+				result = val1 - val2
+			case MUL: // [cite: 23]
+				result = val1 * val2
+			default:
+				continue
+			}
+
+			// Transforma a instrução complexa em um simples MOV [cite: 18]
+			instr.Op = MOV
+			instr.Arg1 = &Operand{Kind: OpLiteral, Value: fmt.Sprintf("%d", result)}
+			instr.Arg2 = nil
+		}
+	}
+}
+
+// EliminateUnreachableCode remove código após JMP ou RET que não tenha Label
+func (o *Optimizer) EliminateUnreachableCode(fn *Function) {
+	optimized := make([]*Instruction, 0)
+	unreachable := false
+
+	for _, instr := range fn.Instructions {
+		// Se encontrarmos um LABEL, o fluxo pode voltar a este ponto [cite: 18]
+		if instr.Op == LABEL {
+			unreachable = false
+		}
+
+		if !unreachable {
+			optimized = append(optimized, instr)
+		}
+
+		// JMP e RET encerram o fluxo linear do bloco atual [cite: 18]
+		if instr.Op == JMP || instr.Op == RET {
+			unreachable = true
+		}
+	}
+	fn.Instructions = optimized
 }
