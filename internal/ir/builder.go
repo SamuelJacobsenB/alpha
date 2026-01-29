@@ -3,6 +3,7 @@ package ir
 import (
 	"fmt"
 
+	"github.com/alpha/internal/parser"
 	"github.com/alpha/internal/semantic"
 )
 
@@ -58,8 +59,7 @@ func (b *IRBuilder) EmitJump(label *Operand) {
 }
 
 func (b *IRBuilder) EmitCondJump(cond, trueLabel, falseLabel *Operand) {
-	// Otimização: Se tivermos condicional simples, usamos JMP_FALSE
-	// Normalmente TAC usa "if false goto L"
+	// Implementação corrigida de salto condicional
 	if falseLabel != nil {
 		b.Emit(JMP_FALSE, cond, falseLabel, nil)
 	}
@@ -81,10 +81,21 @@ func Var(name string, t semantic.Type) *Operand {
 }
 
 func IntLiteral(val int64) *Operand {
-	// Assume semantic.IntType disponível ou cria wrapper
-	return &Operand{Kind: OpLiteral, Value: fmt.Sprintf("%d", val), Type: nil}
+	return &Operand{
+		Kind:  OpLiteral,
+		Value: fmt.Sprintf("%d", val),
+		Type:  &semantic.ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "int"}},
+	}
 }
 
 func BoolLiteral(val bool) *Operand {
-	return &Operand{Kind: OpLiteral, Value: fmt.Sprintf("%t", val), Type: nil}
+	strVal := "false"
+	if val {
+		strVal = "true"
+	}
+	return &Operand{
+		Kind:  OpLiteral,
+		Value: strVal,
+		Type:  &semantic.ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "bool"}},
+	}
 }

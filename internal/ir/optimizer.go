@@ -40,6 +40,12 @@ func (o *Optimizer) ConstantFolding(fn *Function) {
 				result = val1 - val2
 			case MUL: // [cite: 23]
 				result = val1 * val2
+			case DIV:
+				if val2 != 0 {
+					result = val1 / val2
+				} else {
+					continue // Não dobrar divisão por zero
+				}
 			default:
 				continue
 			}
@@ -54,10 +60,19 @@ func (o *Optimizer) ConstantFolding(fn *Function) {
 
 // EliminateUnreachableCode remove código após JMP ou RET que não tenha Label
 func (o *Optimizer) EliminateUnreachableCode(fn *Function) {
-	optimized := make([]*Instruction, 0)
+	optimized := make([]*Instruction, 0, len(fn.Instructions))
 	unreachable := false
+	labels := make(map[string]bool)
 
+	// Primeira passagem: coletar todos os labels
 	for _, instr := range fn.Instructions {
+		if instr.Op == LABEL && instr.Arg1 != nil {
+			labels[instr.Arg1.String()] = true
+		}
+	}
+
+	// Segunda passagem: eliminar código inalcançável
+	for i, instr := range fn.Instructions {
 		// Se encontrarmos um LABEL, o fluxo pode voltar a este ponto [cite: 18]
 		if instr.Op == LABEL {
 			unreachable = false
@@ -69,7 +84,16 @@ func (o *Optimizer) EliminateUnreachableCode(fn *Function) {
 
 		// JMP e RET encerram o fluxo linear do bloco atual [cite: 18]
 		if instr.Op == JMP || instr.Op == RET {
-			unreachable = true
+			// Verificar se o próximo bloco começa com um label
+			// Se não, marca como inalcançável
+			if i+1 < len(fn.Instructions) {
+				nextInstr := fn.Instructions[i+1]
+				if nextInstr.Op != LABEL {
+					unreachable = true
+				}
+			} else {
+				unreachable = true
+			}
 		}
 	}
 	fn.Instructions = optimized

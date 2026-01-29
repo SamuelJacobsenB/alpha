@@ -2,12 +2,12 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"os"
-
+	"github.com/alpha/internal/codegen"
 	"github.com/alpha/internal/ir"
 	"github.com/alpha/internal/lexer"
 	"github.com/alpha/internal/parser"
@@ -45,6 +45,7 @@ type AnalysisResult struct {
 	SemanticErrors []semanticError
 	ASTStructure   string
 	IRModule       *ir.Module
+	GeneratedCode  string
 	Duration       time.Duration
 	Lines          []string // Armazena linhas do código para contexto
 }
@@ -66,11 +67,64 @@ type semanticError struct {
 // ==========================================
 
 func main() {
-	printBanner("🧪 ANÁLISE DO ARQUIVO main.alpha")
+	printBanner("🧪 COMPILADOR ALPHA - FULL STACK")
 
-	code, err := os.ReadFile("main.alpha")
+	// Verificar argumentos
+	if len(os.Args) < 2 {
+		printHelp()
+		return
+	}
+
+	command := os.Args[1]
+
+	switch command {
+	case "analyze":
+		if len(os.Args) < 3 {
+			printError("Uso: alpha analyze <arquivo.alpha>")
+			return
+		}
+		analyzeFileCommand(os.Args[2])
+
+	case "compile":
+		if len(os.Args) < 3 {
+			printError("Uso: alpha compile <arquivo.alpha> [output.go]")
+			return
+		}
+		output := "output.go"
+		if len(os.Args) > 3 {
+			output = os.Args[3]
+		}
+		compileFileCommand(os.Args[2], output)
+
+	case "run":
+		if len(os.Args) < 3 {
+			printError("Uso: alpha run <arquivo.alpha>")
+			return
+		}
+		runFileCommand(os.Args[2])
+
+	default:
+		printError(fmt.Sprintf("Comando desconhecido: %s", command))
+		printHelp()
+	}
+}
+
+func printHelp() {
+	fmt.Println(ColorBold + ColorCyan + "Uso: alpha <comando> [argumentos]" + ColorReset)
+	fmt.Println()
+	fmt.Println("Comandos disponíveis:")
+	fmt.Println("  analyze <arquivo.alpha>  - Analisa o arquivo e mostra detalhes")
+	fmt.Println("  compile <arquivo.alpha> [output.go] - Compila para Go")
+	fmt.Println("  run <arquivo.alpha>      - Compila e executa")
+	fmt.Println()
+}
+
+func analyzeFileCommand(filename string) {
+	printBanner(fmt.Sprintf("🧪 ANÁLISE DO ARQUIVO %s", filename))
+
+	code, err := os.ReadFile(filename)
 	if err != nil {
-		printError("Erro ao ler o arquivo main.alpha:" + err.Error())
+		printError("Erro ao ler o arquivo " + filename + ": " + err.Error())
 		return
 	}
 
@@ -94,6 +148,78 @@ func main() {
 	}
 }
 
+func compileFileCommand(inputFile, outputFile string) {
+	printBanner(fmt.Sprintf("🛠️  COMPILANDO %s → %s", inputFile, outputFile))
+
+	code, err := os.ReadFile(inputFile)
+	if err != nil {
+		printError("Erro ao ler o arquivo " + inputFile + ": " + err.Error())
+		return
+	}
+
+	codeStr := string(code)
+	lines := strings.Split(codeStr, "\n")
+
+	// Executar análise completa
+	result := analyzeFile(codeStr, lines)
+	if !result.Success {
+		printError("Compilação abortada devido a erros na análise")
+		return
+	}
+
+	// Gerar código Go
+	if result.GeneratedCode == "" && result.IRModule != nil {
+		printSection("🔧 GERANDO CÓDIGO GO", ColorGreen)
+		generator := codegen.NewCodeGenerator(nil)
+		result.GeneratedCode = generator.GenerateCode(result.IRModule)
+	}
+
+	if result.GeneratedCode != "" {
+		// Salvar arquivo
+		err = os.WriteFile(outputFile, []byte(result.GeneratedCode), 0644)
+		if err != nil {
+			printError("Erro ao salvar arquivo: " + err.Error())
+			return
+		}
+
+		printSuccess(fmt.Sprintf("✅ Código Go gerado com sucesso em: %s", outputFile))
+
+		// Mostrar estatísticas
+		lineCount := strings.Count(result.GeneratedCode, "\n")
+		fileInfo, _ := os.Stat(outputFile)
+		fmt.Printf("%s📊 Estatísticas:%s\n", ColorBold+ColorWhite, ColorReset)
+		fmt.Printf("   Linhas de código: %d\n", lineCount)
+		fmt.Printf("   Tamanho do arquivo: %.2f KB\n", float64(fileInfo.Size())/1024)
+	} else {
+		printError("❌ Falha ao gerar código Go")
+	}
+}
+
+func runFileCommand(filename string) {
+	printBanner(fmt.Sprintf("🚀 EXECUTANDO %s", filename))
+
+	// Primeiro compilar
+	tempOutput := "temp_alpha_output.go"
+	compileFileCommand(filename, tempOutput)
+
+	// Verificar se a compilação foi bem-sucedida
+	if _, err := os.Stat(tempOutput); err != nil {
+		printError("Compilação falhou, não é possível executar")
+		return
+	}
+
+	// Tentar executar o código Go
+	printSection("▶️  EXECUTANDO PROGRAMA", ColorCyan)
+
+	// Em um sistema real, você compilaria e executaria o Go
+	// Por enquanto, apenas mostra que seria executado
+	printSuccess("✅ Programa compilado com sucesso")
+	fmt.Println(ColorYellow + "💡 Dica: Para executar, use: go run " + tempOutput + ColorReset)
+
+	// Limpeza (opcional)
+	// os.Remove(tempOutput)
+}
+
 func analyzeFile(code string, lines []string) AnalysisResult {
 	startTime := time.Now()
 	result := AnalysisResult{
@@ -102,10 +228,10 @@ func analyzeFile(code string, lines []string) AnalysisResult {
 
 	// ========== ETAPA 1: LEXER ==========
 	printSection("🧪 ETAPA 1: ANÁLISE LÉXICA", ColorBlue)
-	printStep("Analisando tokens...", 1, 5) // Total alterado para 5
+	printStep("Analisando tokens...", 1, 6)
 	scanner := lexer.NewScanner(code)
 
-	// ... (Lógica do Lexer omitida para brevidade, permanece igual)
+	// Coletar tokens
 	tokens := []lexer.Token{}
 	for {
 		tok := scanner.NextToken()
@@ -115,50 +241,97 @@ func analyzeFile(code string, lines []string) AnalysisResult {
 		}
 	}
 	result.Tokens = tokens
+	result.TokenCount = len(tokens)
+
+	// Verificar erros léxicos
+	hasLexerErrors := false
+	for _, tok := range tokens {
+		if tok.Type == lexer.ERROR {
+			hasLexerErrors = true
+			result.LexerErrors = append(result.LexerErrors, tok.Value)
+		}
+	}
+
+	if hasLexerErrors {
+		printStepResult("❌", false)
+		result.Success = false
+		result.Message = "Erros léxicos encontrados"
+		return result
+	}
+	printStepResult("✅", true)
 
 	// ========== ETAPA 2: PARSER ==========
 	printSection("🧪 ETAPA 2: ANÁLISE SINTÁTICA", ColorYellow)
-	printStep("Analisando estrutura sintática...", 2, 5)
+	printStep("Analisando estrutura sintática...", 2, 6)
 	scanner = lexer.NewScanner(code)
 	p := parser.New(scanner)
 	program := p.ParseProgram()
 
-	if p.HasErrors() { /* ... tratamento de erro igual ... */
+	if p.HasErrors() {
+		printStepResult("❌", false)
+		result.Success = false
+		result.Message = "Erros sintáticos encontrados"
+
+		// Converter erros do parser
+		for _, err := range p.Errors {
+			line, col, msg := parseErrorPosition(err)
+			result.ParserErrors = append(result.ParserErrors, parserError{
+				Line:    line,
+				Col:     col,
+				Message: msg,
+			})
+		}
 		return result
 	}
 	printStepResult("✅", true)
 
 	// ========== ETAPA 3: SEMANTIC ==========
 	printSection("🧪 ETAPA 3: ANÁLISE SEMÂNTICA", ColorMagenta)
-	printStep("Analisando semântica...", 3, 5)
+	printStep("Analisando semântica...", 3, 6)
 	checker := semantic.NewChecker()
 	checker.CheckProgram(program)
 
-	if len(checker.Errors) > 0 { /* ... tratamento de erro igual ... */
+	if len(checker.Errors) > 0 {
+		printStepResult("❌", false)
+		result.Success = false
+		result.Message = "Erros semânticos encontrados"
+
+		// Converter erros semânticos
+		for _, err := range checker.Errors {
+			result.SemanticErrors = append(result.SemanticErrors, semanticError{
+				Line:    err.Line,
+				Col:     err.Col,
+				Message: err.Msg,
+			})
+		}
 		return result
 	}
 	printStepResult("✅", true)
 
 	// ========== ETAPA 4: GERAÇÃO DE IR ==========
 	printSection("🧪 ETAPA 4: GERAÇÃO DE IR", ColorCyan)
-	printStep("Gerando IR (Representação Intermediária)...", 4, 5)
+	printStep("Gerando IR (Representação Intermediária)...", 4, 6)
 	generator := ir.NewGenerator(checker)
 	irModule := generator.Generate(program)
 	printStepResult("✅", true)
 
-	// ========== ETAPA 5: OTIMIZAÇÃO DE IR (NOVO) ==========
+	// ========== ETAPA 5: OTIMIZAÇÃO DE IR ==========
 	printSection("🧪 ETAPA 5: OTIMIZAÇÃO DE IR", ColorGreen)
-	printStep("Aplicando Constant Folding e Dead Code Elimination...", 5, 5)
-
-	// Chamada ao Optimizer que criamos no arquivo optimizer.go
+	printStep("Aplicando Constant Folding e Dead Code Elimination...", 5, 6)
 	optimizer := ir.NewOptimizer(irModule)
 	optimizer.Optimize()
+	result.IRModule = irModule
+	printStepResult("✅", true)
 
-	result.IRModule = irModule // O IRModule agora está otimizado
+	// ========== ETAPA 6: GERAÇÃO DE CÓDIGO ==========
+	printSection("🧪 ETAPA 6: GERAÇÃO DE CÓDIGO GO", ColorGreen)
+	printStep("Gerando código Go otimizado...", 6, 6)
+	codegen := codegen.NewCodeGenerator(checker)
+	result.GeneratedCode = codegen.GenerateCode(irModule)
 	printStepResult("✅", true)
 
 	result.Success = true
-	result.Message = "Análise e Otimização completas com sucesso"
+	result.Message = "Análise, Otimização e Geração de Código completas com sucesso"
 	result.Duration = time.Since(startTime)
 
 	return result
@@ -257,6 +430,14 @@ func printStepResult(result string, success bool) {
 	}
 }
 
+func printSuccess(message string) {
+	fmt.Printf("%s✅ %s%s\n", ColorGreen, message, ColorReset)
+}
+
+func printError(message string) {
+	fmt.Printf("%s❌ %s%s\n", ColorRed, message, ColorReset)
+}
+
 func printTokens(tokens []lexer.Token) {
 	tokenTypeNames := map[lexer.TokenType]string{
 		lexer.EOF:     "EOF",
@@ -307,193 +488,6 @@ func printTokens(tokens []lexer.Token) {
 			color+limitString(tok.Lexeme, 23)+ColorReset,
 			color+limitString(tok.Value, 30)+ColorReset)
 	}
-}
-
-func printASTStructure(node interface{}, indent int) string {
-	indentStr := strings.Repeat("  ", indent)
-	var result string
-
-	switch n := node.(type) {
-	case *parser.Program:
-		fmt.Printf("%s%sProgram%s\n", indentStr, ColorCyan+ColorBold, ColorReset)
-		result = "Program"
-		for i, stmt := range n.Body {
-			fmt.Printf("%s  %s[%d]%s ", indentStr, ColorGray, i+1, ColorReset)
-			printASTStructure(stmt, indent+1)
-		}
-
-	case *parser.PackageDecl:
-		fmt.Printf("%s%sPackage: %s%s\n", indentStr, ColorGreen, n.Name, ColorReset)
-		result = "PackageDecl"
-
-	case *parser.ImportDecl:
-		fmt.Printf("%s%sImport from: %s%s\n", indentStr, ColorGreen, n.Path, ColorReset)
-		if n.Imports != nil {
-			for _, imp := range n.Imports {
-				if imp.Alias != "" {
-					fmt.Printf("%s    %s as %s\n", indentStr, imp.Name, imp.Alias)
-				} else {
-					fmt.Printf("%s    %s\n", indentStr, imp.Name)
-				}
-			}
-		}
-		result = "ImportDecl"
-
-	case *parser.VarDecl:
-		fmt.Printf("%s%sVar: %s%s\n", indentStr, ColorYellow, n.Name, ColorReset)
-		if n.Type != nil {
-			fmt.Printf("%s  Type: ", indentStr)
-			printASTStructure(n.Type, 0)
-		}
-		if n.Init != nil {
-			fmt.Printf("%s  Init: ", indentStr)
-			printASTStructure(n.Init, 0)
-		}
-		result = "VarDecl"
-
-	case *parser.FunctionDecl:
-		fmt.Printf("%s%sFunction: %s%s\n", indentStr, ColorBlue, n.Name, ColorReset)
-		if n.ReturnTypes != nil {
-			fmt.Printf("%s  ReturnType: ", indentStr)
-			printASTStructure(n.ReturnTypes, 0)
-		}
-		if len(n.Params) > 0 {
-			fmt.Printf("%s  Params:\n", indentStr)
-			for _, param := range n.Params {
-				fmt.Printf("%s    %s: ", indentStr, param.Name)
-				printASTStructure(param.Type, 0)
-			}
-		}
-		if len(n.Generics) > 0 {
-			fmt.Printf("%s  Generics: ", indentStr)
-			for _, g := range n.Generics {
-				fmt.Printf("%s ", g.Name)
-			}
-			fmt.Println()
-		}
-		fmt.Printf("%s  Body (%d statements)\n", indentStr, len(n.Body))
-		result = "FunctionDecl"
-
-	case *parser.StructDecl:
-		fmt.Printf("%s%sStruct: %s%s\n", indentStr, ColorMagenta, n.Name, ColorReset)
-		if len(n.Generics) > 0 {
-			fmt.Printf("%s  Generics: ", indentStr)
-			for _, g := range n.Generics {
-				fmt.Printf("%s ", g.Name)
-			}
-			fmt.Println()
-		}
-		if len(n.Fields) > 0 {
-			fmt.Printf("%s  Fields:\n", indentStr)
-			for _, field := range n.Fields {
-				visibility := "public"
-				if field.IsPrivate {
-					visibility = "private"
-				}
-				fmt.Printf("%s    %s %s: ", indentStr, visibility, field.Name)
-				printASTStructure(field.Type, 0)
-			}
-		}
-		result = "StructDecl"
-
-	case *parser.IfStmt:
-		fmt.Printf("%s%sIf Statement%s\n", indentStr, ColorCyan, ColorReset)
-		if n.Cond != nil {
-			fmt.Printf("%s  Condition: ", indentStr)
-			printASTStructure(n.Cond, 0)
-		}
-		fmt.Printf("%s  Then (%d statements)\n", indentStr, len(n.Then))
-		if len(n.Else) > 0 {
-			fmt.Printf("%s  Else (%d statements)\n", indentStr, len(n.Else))
-		}
-		result = "IfStmt"
-
-	case *parser.WhileStmt:
-		fmt.Printf("%s%sWhile Loop%s\n", indentStr, ColorCyan, ColorReset)
-		if n.Cond != nil {
-			fmt.Printf("%s  Condition: ", indentStr)
-			printASTStructure(n.Cond, 0)
-		}
-		fmt.Printf("%s  Body (%d statements)\n", indentStr, len(n.Body))
-		result = "WhileStmt"
-
-	case *parser.ForStmt:
-		fmt.Printf("%s%sFor Loop%s\n", indentStr, ColorCyan, ColorReset)
-		if n.Init != nil {
-			fmt.Printf("%s  Init: ", indentStr)
-			printASTStructure(n.Init, 0)
-		}
-		if n.Cond != nil {
-			fmt.Printf("%s  Condition: ", indentStr)
-			printASTStructure(n.Cond, 0)
-		}
-		if n.Post != nil {
-			fmt.Printf("%s  Post: ", indentStr)
-			printASTStructure(n.Post, 0)
-		}
-		fmt.Printf("%s  Body (%d statements)\n", indentStr, len(n.Body))
-		result = "ForStmt"
-
-	case *parser.Identifier:
-		fmt.Printf("%s%sIdentifier: %s%s\n", indentStr, ColorGreen, n.Name, ColorReset)
-		result = "Identifier"
-
-	case *parser.IntLiteral:
-		fmt.Printf("%s%sInt: %d%s\n", indentStr, ColorYellow, n.Value, ColorReset)
-		result = "IntLiteral"
-
-	case *parser.StringLiteral:
-		fmt.Printf("%s%sString: \"%s\"%s\n", indentStr, ColorGreen, limitString(n.Value, 40), ColorReset)
-		result = "StringLiteral"
-
-	case *parser.BinaryExpr:
-		fmt.Printf("%s%sBinary: %s%s\n", indentStr, ColorMagenta, n.Op, ColorReset)
-		fmt.Printf("%s  Left: ", indentStr)
-		printASTStructure(n.Left, 0)
-		fmt.Printf("%s  Right: ", indentStr)
-		printASTStructure(n.Right, 0)
-		result = "BinaryExpr"
-
-	case *parser.CallExpr:
-		fmt.Printf("%s%sFunction Call%s\n", indentStr, ColorBlue, ColorReset)
-		if n.Callee != nil {
-			fmt.Printf("%s  Callee: ", indentStr)
-			printASTStructure(n.Callee, 0)
-		}
-		fmt.Printf("%s  Args (%d):\n", indentStr, len(n.Args))
-		for i, arg := range n.Args {
-			fmt.Printf("%s    [%d] ", indentStr, i+1)
-			printASTStructure(arg, 0)
-		}
-		result = "CallExpr"
-
-	case *parser.PrimitiveType:
-		fmt.Printf("%s%sType: %s%s\n", indentStr, ColorCyan, n.Name, ColorReset)
-		result = "PrimitiveType"
-
-	case *parser.IdentifierType:
-		fmt.Printf("%s%sType: %s%s\n", indentStr, ColorCyan, n.Name, ColorReset)
-		result = "IdentifierType"
-
-	case *parser.GenericType:
-		fmt.Printf("%s%sGeneric Type: %s%s\n", indentStr, ColorCyan, n.Name, ColorReset)
-		if len(n.TypeArgs) > 0 {
-			fmt.Printf("%s  Type Args (%d):\n", indentStr, len(n.TypeArgs))
-			for i, arg := range n.TypeArgs {
-				fmt.Printf("%s    [%d] ", indentStr, i+1)
-				printASTStructure(arg, 0)
-			}
-		}
-		result = "GenericType"
-
-	default:
-		typeName := fmt.Sprintf("%T", n)
-		simpleName := strings.TrimPrefix(typeName, "*parser.")
-		fmt.Printf("%s%s%s%s\n", indentStr, ColorGray, simpleName, ColorReset)
-		result = simpleName
-	}
-
-	return result
 }
 
 func printAnalysisResult(result AnalysisResult) {
@@ -563,7 +557,9 @@ func printAnalysisResult(result AnalysisResult) {
 	fmt.Print("\n" + ColorBold)
 	if result.Success {
 		fmt.Println(ColorGreen + "✨ ANÁLISE COMPLETA BEM-SUCEDIDA! ✨" + ColorReset)
-		fmt.Println(ColorCyan + "📋 O IR foi gerado com sucesso e será exibido abaixo." + ColorReset)
+		if result.GeneratedCode != "" {
+			fmt.Println(ColorCyan + "📝 Código Go gerado com sucesso." + ColorReset)
+		}
 	} else {
 		fmt.Println(ColorRed + "⚠️  ANÁLISE ENCONTROU ERROS" + ColorReset)
 		fmt.Println(ColorYellow + "💡 Dica: Verifique a sintaxe e os tipos mencionados nos erros acima." + ColorReset)
@@ -652,8 +648,4 @@ func colorIf(condition bool, trueColor, falseColor string) string {
 
 func printErrorSection(title string, count int) {
 	fmt.Printf("\n%s%s (%d):%s\n", ColorRed+ColorBold, title, count, ColorReset)
-}
-
-func printError(message string) {
-	fmt.Printf("%s❌ %s%s\n", ColorRed, message, ColorReset)
 }

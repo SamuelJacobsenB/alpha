@@ -23,17 +23,33 @@ func NewGenerator(checker *semantic.Checker) *Generator {
 }
 
 func (g *Generator) Generate(prog *parser.Program) *Module {
-	// Pré-passo: Registrar structs
+	// 1. Pré-passo: Registrar structs
 	for _, stmt := range prog.Body {
 		if s, ok := stmt.(*parser.StructDecl); ok {
 			g.builder.Module.Structs = append(g.builder.Module.Structs, s)
 		}
 	}
 
-	// Geração de código
+	// 2. Geração de código (isso preencherá as funções e o corpo do init)
 	for _, stmt := range prog.Body {
 		g.genGlobalStmt(stmt)
 	}
+
+	// 3. FINALIZAÇÃO: Selar a função init
+	// Procuramos a função 'init' que foi criada pelo ensureInitFunction
+	for _, fn := range g.builder.Module.Functions {
+		if fn.Name == "init" {
+			// Verificamos se a última instrução já não é um RET
+			// para evitar retornos duplicados
+			lastIdx := len(fn.Instructions) - 1
+			if lastIdx < 0 || fn.Instructions[lastIdx].Op != RET {
+				// Forçamos o builder a apontar para o init e emitimos o retorno final
+				g.builder.CurrentFunc = fn
+				g.builder.Emit(RET, nil, nil, nil)
+			}
+		}
+	}
+
 	return g.builder.Module
 }
 
@@ -48,9 +64,126 @@ func (g *Generator) genGlobalStmt(stmt parser.Stmt) {
 	case *parser.PackageDecl:
 		g.builder.Module.Name = s.Name
 	case *parser.VarDecl:
-		// Variáveis globais normalmente vão para uma função 'init' ou segmento de dados
-		// Simplificação: Adicionando a um 'init' implícito ou estrutura global
-		// TODO: Implementar inicialização global
+		g.genGlobalVarDecl(s)
+	case *parser.ConstDecl:
+		g.genGlobalConstDecl(s)
+	}
+}
+
+func (g *Generator) genGlobalVarDecl(decl *parser.VarDecl) {
+	// Inicialização de variáveis globais
+	typ := g.resolveType(decl.Type)
+	globalOp := &Operand{
+		Kind:  OpVar,
+		Value: decl.Name,
+		Type:  typ,
+	}
+
+	// Armazenar no módulo como uma instrução de alocação
+	g.builder.Module.Globals = append(g.builder.Module.Globals, &Instruction{
+		Op:     ALLOCA,
+		Result: globalOp,
+		Arg1:   &Operand{Kind: OpType, Type: typ},
+	})
+
+	if decl.Init != nil {
+		initFunc := g.ensureInitFunction()
+		currentFunc := g.builder.CurrentFunc
+		g.builder.CurrentFunc = initFunc
+
+		val := g.genExpr(decl.Init)
+		// Emitir MOV ao invés de STORE para globais
+		globalOp := &Operand{
+			Kind:  OpVar,
+			Value: decl.Name,
+			Type:  val.Type,
+		}
+		g.builder.Emit(MOV, val, nil, globalOp)
+
+		g.builder.CurrentFunc = currentFunc
+	}
+}
+
+func (g *Generator) genGlobalConstDecl(decl *parser.ConstDecl) {
+	// Constantes globais são resolvidas em tempo de compilação
+	// Usamos genExpr para obter o operando e seu tipo
+	valOperand := g.genExpr(decl.Init)
+
+	globalOp := &Operand{
+		Kind:  OpVar,
+		Value: decl.Name,
+		Type:  valOperand.Type,
+	}
+
+	g.builder.Module.Globals = append(g.builder.Module.Globals, &Instruction{
+		Op:     MOV,
+		Result: globalOp,
+		Arg1:   valOperand,
+	})
+}
+
+func (g *Generator) ensureInitFunction() *Function {
+	// Verifica se já existe uma função init
+	for _, fn := range g.builder.Module.Functions {
+		if fn.Name == "init" {
+			return fn
+		}
+	}
+
+	// Cria função init se não existir
+	initFunc := &Function{
+		Name:       "init",
+		TempCount:  0,
+		LabelCount: 0,
+		IsExported: false,
+	}
+
+	// Adiciona ao módulo
+	g.builder.Module.Functions = append(g.builder.Module.Functions, initFunc)
+
+	// Se estamos no meio da geração de outra função,
+	// precisamos garantir que a função init tenha um RET
+	savedFunc := g.builder.CurrentFunc
+	g.builder.CurrentFunc = initFunc
+
+	// Restaura a função atual
+	if savedFunc != nil {
+		g.builder.CurrentFunc = savedFunc
+	}
+
+	return initFunc
+}
+
+func (g *Generator) resolveType(parserType parser.Type) semantic.Type {
+	if parserType == nil {
+		return nil
+	}
+
+	// Usamos o checker para resolver o tipo
+	switch t := parserType.(type) {
+	case *parser.PrimitiveType:
+		return &semantic.ParserTypeWrapper{Type: t}
+	case *parser.IdentifierType:
+		// Para tipos definidos pelo usuário, por enquanto, retornamos um wrapper básico
+		return &semantic.ParserTypeWrapper{Type: t}
+	case *parser.ArrayType:
+		// Por enquanto, não resolvemos o tipo do elemento recursivamente
+		return &semantic.ParserTypeWrapper{
+			Type: &parser.ArrayType{
+				ElementType: &parser.PrimitiveType{Name: "any"}, // Simplificação
+				Size:        t.Size,
+			},
+		}
+	case *parser.PointerType:
+		// Por enquanto, não resolvemos o tipo base recursivamente
+		return &semantic.ParserTypeWrapper{
+			Type: &parser.PointerType{
+				BaseType: &parser.PrimitiveType{Name: "any"}, // Simplificação
+			},
+		}
+	default:
+		// Para outros tipos, retorna um tipo "any"
+		return &semantic.ParserTypeWrapper{Type: &parser.PrimitiveType{Name: "any"}}
 	}
 }
 
@@ -59,8 +192,17 @@ func (g *Generator) genFunction(fn *parser.FunctionDecl) {
 		Name:       fn.Name,
 		TempCount:  0,
 		LabelCount: 0,
-		IsExported: isExported(fn.Name), // Lógica baseada em capitalização ou keyword export
+		IsExported: isExported(fn.Name),
+		ReturnType: semantic.ToType(fn.ReturnTypes[0]),
 	}
+
+	generics := make([]string, 0)
+	if fn.Generics != nil {
+		for _, gen := range fn.Generics {
+			generics = append(generics, gen.Name)
+		}
+	}
+	irFunc.Generics = generics
 
 	// Configurar builder para a nova função
 	g.builder.CurrentFunc = irFunc
@@ -102,12 +244,18 @@ func (g *Generator) genStmt(stmt parser.Stmt) {
 		for _, sub := range s.Body {
 			g.genStmt(sub)
 		}
+	case *parser.SwitchStmt:
+		g.genSwitch(s)
+	case *parser.BreakStmt:
+		g.genBreak()
+	case *parser.ContinueStmt:
+		g.genContinue()
 	}
 }
 
 func (g *Generator) genVarDecl(decl *parser.VarDecl) {
 	// ALLOCA type
-	typ := semantic.ToType(decl.Type) // Assumindo conversão disponível
+	typ := semantic.ToType(decl.Type)
 	varOp := Var(decl.Name, typ)
 
 	// IR: %var = ALLOCA type
@@ -116,7 +264,6 @@ func (g *Generator) genVarDecl(decl *parser.VarDecl) {
 	if decl.Init != nil {
 		val := g.genExpr(decl.Init)
 		// IR: STORE %var, %val
-		// Nota: Dependendo da semântica, pode ser MOV se for SSA/Register-based
 		g.builder.Emit(STORE, varOp, val, nil)
 	}
 }
@@ -131,12 +278,11 @@ func (g *Generator) genReturn(ret *parser.ReturnStmt) {
 		val := g.genExpr(ret.Values[0])
 		g.builder.Emit(RET, val, nil, nil)
 	} else {
-		// Multi-return: Pode ser implementado retornando uma struct ou ponteiro
-		// Simplificação: Emitimos múltiplos RETs ou um RET com ponteiro agregado
-		// Aqui assumiremos que o backend lida com múltiplos valores
+		// Multi-return: criar uma struct temporária
+		// Para simplificação, emitimos múltiplos valores em registros
+		// (backend precisará lidar com isso)
 		for _, expr := range ret.Values {
 			val := g.genExpr(expr)
-			// Pseudocódigo para push no stack de retorno
 			g.builder.Emit(RET, val, nil, nil)
 		}
 	}
@@ -162,7 +308,7 @@ func (g *Generator) genIf(stmt *parser.IfStmt) {
 	for _, s := range stmt.Then {
 		g.genStmt(s)
 	}
-	g.builder.EmitJump(endLabel)
+	g.builder.Emit(JMP, endLabel, nil, nil)
 
 	// Bloco Else (se existir)
 	if stmt.Else != nil {
@@ -179,18 +325,24 @@ func (g *Generator) genWhile(stmt *parser.WhileStmt) {
 	startLabel := g.builder.NewLabel("while_start")
 	endLabel := g.builder.NewLabel("while_end")
 
+	// Empilhar labels para break/continue
+	prevBreak := g.builder.CurrentFunc.LabelCount
+	g.builder.CurrentFunc.LabelCount += 2
+
 	g.builder.EmitLabel(startLabel)
 
 	cond := g.genExpr(stmt.Cond)
 	g.builder.Emit(JMP_FALSE, cond, endLabel, nil)
 
 	for _, s := range stmt.Body {
-		// TODO: Adicionar suporte a break/continue empilhando labels
 		g.genStmt(s)
 	}
 
-	g.builder.EmitJump(startLabel)
+	g.builder.Emit(JMP, startLabel, nil, nil)
 	g.builder.EmitLabel(endLabel)
+
+	// Restaurar labels
+	g.builder.CurrentFunc.LabelCount = prevBreak
 }
 
 func (g *Generator) genFor(stmt *parser.ForStmt) {
@@ -200,14 +352,11 @@ func (g *Generator) genFor(stmt *parser.ForStmt) {
 	}
 
 	startLabel := g.builder.NewLabel("for_start")
+	condLabel := g.builder.NewLabel("for_cond")
 	endLabel := g.builder.NewLabel("for_end")
 
+	g.builder.Emit(JMP, condLabel, nil, nil)
 	g.builder.EmitLabel(startLabel)
-
-	if stmt.Cond != nil {
-		cond := g.genExpr(stmt.Cond)
-		g.builder.Emit(JMP_FALSE, cond, endLabel, nil)
-	}
 
 	for _, s := range stmt.Body {
 		g.genStmt(s)
@@ -217,8 +366,54 @@ func (g *Generator) genFor(stmt *parser.ForStmt) {
 		g.genStmt(stmt.Post)
 	}
 
-	g.builder.EmitJump(startLabel)
+	g.builder.EmitLabel(condLabel)
+	if stmt.Cond != nil {
+		cond := g.genExpr(stmt.Cond)
+		g.builder.Emit(JMP_TRUE, cond, startLabel, nil)
+	} else {
+		g.builder.Emit(JMP, startLabel, nil, nil)
+	}
+
 	g.builder.EmitLabel(endLabel)
+}
+
+func (g *Generator) genSwitch(stmt *parser.SwitchStmt) {
+	// Implementação simplificada de switch
+	expr := g.genExpr(stmt.Expr)
+	endLabel := g.builder.NewLabel("switch_end")
+
+	for _, clause := range stmt.Cases {
+		caseLabel := g.builder.NewLabel("case")
+
+		if clause.Value != nil {
+			caseVal := g.genExpr(clause.Value)
+			cond := g.builder.NewTemp(nil)
+			g.builder.Emit(EQ, expr, caseVal, cond)
+			g.builder.Emit(JMP_TRUE, cond, caseLabel, nil)
+		} else {
+			// default case
+			g.builder.EmitLabel(caseLabel)
+		}
+
+		for _, bodyStmt := range clause.Body {
+			g.genStmt(bodyStmt)
+		}
+		g.builder.Emit(JMP, endLabel, nil, nil)
+	}
+
+	g.builder.EmitLabel(endLabel)
+}
+
+func (g *Generator) genBreak() {
+	// Implementação simplificada: pular para o fim do loop mais interno
+	endLabel := g.builder.NewLabel("loop_end")
+	g.builder.Emit(JMP, endLabel, nil, nil)
+}
+
+func (g *Generator) genContinue() {
+	// Implementação simplificada: pular para o início do loop mais interno
+	startLabel := g.builder.NewLabel("loop_start")
+	g.builder.Emit(JMP, startLabel, nil, nil)
 }
 
 // ============================
@@ -246,10 +441,76 @@ func (g *Generator) genExpr(expr parser.Expr) *Operand {
 		return g.genIndexExpr(e)
 	case *parser.MemberExpr:
 		return g.genMemberExpr(e)
+	case *parser.UnaryExpr:
+		return g.genUnaryExpr(e)
+	case *parser.TernaryExpr:
+		return g.genTernaryExpr(e)
+	case *parser.TypeCastExpr:
+		return g.genTypeCast(e)
 	default:
 		// Fallback para outros tipos não implementados aqui
 		return g.builder.NewTemp(nil)
 	}
+}
+
+func (g *Generator) genUnaryExpr(e *parser.UnaryExpr) *Operand {
+	expr := g.genExpr(e.Expr)
+	res := g.builder.NewTemp(nil)
+
+	if e.Postfix {
+		// Para pós-fixo (i++), retornar valor original, depois incrementar
+		temp := g.builder.NewTemp(nil)
+		g.builder.Emit(MOV, expr, nil, temp)
+		g.builder.Emit(ADD, expr, Literal("1", nil), expr)
+		return temp
+	}
+
+	switch e.Op {
+	case "-":
+		g.builder.Emit(SUB, Literal("0", nil), expr, res)
+	case "!":
+		g.builder.Emit(XOR, expr, Literal("1", nil), res)
+	case "&":
+		// Operador de endereço
+		return g.genAddr(e.Expr)
+	case "*":
+		// Dereferenciação de ponteiro
+		g.builder.Emit(LOAD, expr, nil, res)
+	default:
+		g.builder.Emit(MOV, expr, nil, res)
+	}
+	return res
+}
+
+func (g *Generator) genTernaryExpr(e *parser.TernaryExpr) *Operand {
+	cond := g.genExpr(e.Cond)
+	trueLabel := g.builder.NewLabel("ternary_true")
+	falseLabel := g.builder.NewLabel("ternary_false")
+	endLabel := g.builder.NewLabel("ternary_end")
+
+	result := g.builder.NewTemp(nil)
+
+	g.builder.Emit(JMP_FALSE, cond, falseLabel, nil)
+	g.builder.EmitLabel(trueLabel)
+	trueVal := g.genExpr(e.TrueExpr)
+	g.builder.Emit(MOV, trueVal, nil, result)
+	g.builder.Emit(JMP, endLabel, nil, nil)
+
+	g.builder.EmitLabel(falseLabel)
+	falseVal := g.genExpr(e.FalseExpr)
+	g.builder.Emit(MOV, falseVal, nil, result)
+
+	g.builder.EmitLabel(endLabel)
+	return result
+}
+
+func (g *Generator) genTypeCast(e *parser.TypeCastExpr) *Operand {
+	expr := g.genExpr(e.Expr)
+	res := g.builder.NewTemp(semantic.ToType(e.Type))
+
+	// Emitir instrução CAST
+	g.builder.Emit(CAST, expr, nil, res)
+	return res
 }
 
 func (g *Generator) genBinaryExpr(e *parser.BinaryExpr) *Operand {
@@ -286,38 +547,42 @@ func (g *Generator) genBinaryExpr(e *parser.BinaryExpr) *Operand {
 		op = LE
 	case ">=":
 		op = GE
+	case "&":
+		op = AND
+	case "|":
+		op = OR
+	case "^":
+		op = XOR
+	case "<<":
+		op = SHL
+	case ">>":
+		op = SHR
 	default:
 		panic("Unknown operator " + e.Op)
 	}
 
-	result := g.builder.NewTemp(nil) // Tipo deve vir do Semantic
+	result := g.builder.NewTemp(nil)
 	g.builder.Emit(op, left, right, result)
 	return result
 }
 
 func (g *Generator) genLogicalShortCircuit(e *parser.BinaryExpr) *Operand {
-	// Implementação de &&:
-	// t1 = left
-	// JMP_FALSE t1, end
-	// t1 = right
-	// end:
-
 	result := g.builder.NewTemp(nil)
 	left := g.genExpr(e.Left)
-
-	// Copia left para result
-	g.builder.Emit(MOV, left, nil, result)
 
 	endLabel := g.builder.NewLabel("logic_end")
 
 	if e.Op == "&&" {
-		g.builder.Emit(JMP_FALSE, result, endLabel, nil)
+		// left && right
+		g.builder.Emit(JMP_FALSE, left, endLabel, nil)
+		right := g.genExpr(e.Right)
+		g.builder.Emit(MOV, right, nil, result)
 	} else { // ||
-		g.builder.Emit(JMP_TRUE, result, endLabel, nil)
+		// left || right
+		g.builder.Emit(JMP_TRUE, left, endLabel, nil)
+		right := g.genExpr(e.Right)
+		g.builder.Emit(MOV, right, nil, result)
 	}
-
-	right := g.genExpr(e.Right)
-	g.builder.Emit(MOV, right, nil, result)
 
 	g.builder.EmitLabel(endLabel)
 	return result
@@ -346,16 +611,12 @@ func (g *Generator) genCallExpr(e *parser.CallExpr) *Operand {
 	instr := g.builder.Emit(CALL, callee, nil, result)
 	instr.Args = args
 
-	_ = instr // evitar unused
-
 	return result
 }
 
 func (g *Generator) genBuiltin(name string, args []*Operand) *Operand {
 	res := g.builder.NewTemp(nil)
 
-	// Nota: Muitos built-ins na sua sintaxe recebem ponteiros (&arr)
-	// O IR assume que args[0] já é o endereço ou a referência correta
 	switch name {
 	case "length":
 		g.builder.Emit(LEN, args[0], nil, res)
@@ -366,23 +627,22 @@ func (g *Generator) genBuiltin(name string, args []*Operand) *Operand {
 		g.builder.Emit(APPEND, args[0], args[1], res)
 	case "remove":
 		// remove(&arr, element)
-		g.builder.Emit(SUB, args[0], args[1], res) // No IR tratamos como uma operação de remoção
+		g.builder.Emit(REMOVE, args[0], args[1], res)
 	case "removeIndex":
 		// removeIndex(&arr, index)
-		g.builder.Emit(GET_INDEX, args[0], args[1], nil) // Marca para remoção
-		g.builder.Emit(NOP, nil, nil, res)
+		g.builder.Emit(REMOVE_INDEX, args[0], args[1], res)
 	case "delete":
 		// delete(&map, key)
-		g.builder.Emit(SUB, args[0], args[1], res)
+		g.builder.Emit(DELETE, args[0], args[1], res)
 	case "add":
 		// add(&set, value)
 		g.builder.Emit(ADD, args[0], args[1], res)
 	case "clear":
 		// clear(&map)
-		g.builder.Emit(MOV, Literal("0", nil), nil, args[0])
+		g.builder.Emit(CLEAR, args[0], nil, res)
 	case "has":
 		// has(&set, value) -> retorna bool
-		g.builder.Emit(EQ, args[0], args[1], res)
+		g.builder.Emit(HAS, args[0], args[1], res)
 	default:
 		// Para funções não mapeadas, tratamos como uma chamada genérica de sistema
 		g.builder.Emit(CALL, &Operand{Kind: OpFunction, Value: "builtin_" + name}, nil, res)
@@ -401,8 +661,6 @@ func (g *Generator) genAssign(e *parser.AssignExpr) *Operand {
 	}
 
 	// Se for acesso complexo (array/struct), precisamos do endereço
-	// Simplificação: genExpr retorna valor, precisaríamos de genAddr para o lado esquerdo
-	// Assumindo genAddr para AssignExpr:
 	addr := g.genAddr(e.Left)
 	g.builder.Emit(STORE, addr, val, nil)
 
@@ -430,22 +688,29 @@ func (g *Generator) genAddr(expr parser.Expr) *Operand {
 	// Lógica para obter endereço de memória ao invés do valor
 	switch e := expr.(type) {
 	case *parser.Identifier:
-		return Var(e.Name, nil) // Em TAC, Var pode ser tratado como endr
+		return Var(e.Name, nil)
 	case *parser.IndexExpr:
 		// Calcula endereço do elemento
 		arr := g.genExpr(e.Array)
 		idx := g.genExpr(e.Index)
 		res := g.builder.NewTemp(nil)
-		g.builder.Emit(GET_ADDR, arr, idx, res) // Opcode específico para ptr math
+		g.builder.Emit(GET_ADDR, arr, idx, res)
+		return res
+	case *parser.MemberExpr:
+		obj := g.genExpr(e.Object)
+		field := &Operand{Kind: OpField, Value: e.Member}
+		res := g.builder.NewTemp(nil)
+		g.builder.Emit(GET_ADDR, obj, field, res)
 		return res
 	default:
-		panic("Cannot assign to this expression")
+		panic("Cannot take address of this expression")
 	}
 }
 
 func isBuiltin(name string) bool {
 	builtins := map[string]bool{
 		"append": true, "length": true, "remove": true, "delete": true,
+		"add": true, "clear": true, "has": true, "removeIndex": true,
 	}
 	return builtins[name]
 }

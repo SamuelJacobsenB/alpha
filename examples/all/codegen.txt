@@ -1,6 +1,50 @@
 package codegen
 
 import (
+	"github.com/alpha/internal/ir"
+	"github.com/alpha/internal/parser"
+	"github.com/alpha/internal/semantic"
+)
+
+// CodeGenerator é o ponto de entrada principal para geração de código
+type CodeGenerator struct {
+	checker *semantic.Checker
+	module  *ir.Module
+}
+
+func NewCodeGenerator(checker *semantic.Checker) *CodeGenerator {
+	return &CodeGenerator{
+		checker: checker,
+	}
+}
+
+// GenerateCode gera código Go a partir do IR otimizado
+func (cg *CodeGenerator) GenerateCode(module *ir.Module) string {
+	cg.module = module
+
+	// Pipeline de otimização
+	pipeline := NewPipeline(module)
+
+	// Compilar
+	return pipeline.Compile()
+}
+
+// GenerateFromAST gera código diretamente da AST (atalho)
+func (cg *CodeGenerator) GenerateFromAST(prog *parser.Program) string {
+	// 1. Gerar IR
+	generator := ir.NewGenerator(cg.checker)
+	module := generator.Generate(prog)
+
+	// 2. Otimizar
+	optimizer := ir.NewOptimizer(module)
+	optimizer.Optimize()
+
+	// 3. Gerar código
+	return cg.GenerateCode(module)
+}
+package codegen
+
+import (
 	"fmt"
 	"go/format"
 	"strings"
@@ -809,4 +853,459 @@ func (e *OptimizedEmitter) emitCall(instr *ir.Instruction) {
 	}
 
 	e.output.WriteString(fmt.Sprintf("\t%s%s(%s)\n", dst, funcName, strings.Join(args, ", ")))
+}
+package codegen
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/alpha/internal/parser"
+	"github.com/alpha/internal/semantic"
+)
+
+// TypeMapper gerencia conversões de tipos Alpha -> Go
+type TypeMapper struct {
+	structTypes map[string]string // cache de tipos de struct
+	unionTypes  map[string]string // cache de union types
+}
+
+func NewTypeMapper() *TypeMapper {
+	return &TypeMapper{
+		structTypes: make(map[string]string),
+		unionTypes:  make(map[string]string),
+	}
+}
+
+// ToGoType converte tipos Alpha para Go mantendo Generics
+func (tm *TypeMapper) ToGoType(t semantic.Type) string {
+	if t == nil {
+		return "" // void
+	}
+
+	// Desembrulha o ParserTypeWrapper se necessário
+	if wrapper, ok := t.(*semantic.ParserTypeWrapper); ok {
+		return tm.mapParserType(wrapper.Type)
+	}
+
+	// Fallback para tipos manuais ou strings
+	return tm.mapSimpleString(semantic.StringifyType(t))
+}
+
+func (tm *TypeMapper) mapSimpleString(s string) string {
+	switch s {
+	case "int":
+		return "int64"
+	case "float":
+		return "float64"
+	case "bool":
+		return "bool"
+	case "string":
+		return "string"
+	case "void":
+		return ""
+	case "any":
+		return "interface{}"
+	case "byte":
+		return "byte"
+	case "char":
+		return "rune"
+	case "error":
+		return "error"
+	default:
+		// Presume ser um tipo definido pelo usuário
+		return s
+	}
+}
+
+// GetElementType extrai o tipo elemento de arrays/slices
+func (tm *TypeMapper) GetElementType(goType string) string {
+	if strings.HasPrefix(goType, "[]") {
+		return goType[2:]
+	}
+	if strings.HasPrefix(goType, "map[") {
+		// Extrai tipo valor de map[K]V
+		parts := strings.SplitN(goType, "]", 2)
+		if len(parts) == 2 {
+			return parts[1]
+		}
+	}
+	return goType
+}
+
+// IsReferenceType verifica se o tipo é passado por referência
+func (tm *TypeMapper) IsReferenceType(goType string) bool {
+	return strings.HasPrefix(goType, "*") ||
+		strings.HasPrefix(goType, "[]") ||
+		strings.HasPrefix(goType, "map[") ||
+		strings.HasPrefix(goType, "interface{}")
+}
+
+// ZeroValue retorna valor zero otimizado
+func (tm *TypeMapper) ZeroValue(goType string) string {
+	switch goType {
+	case "int64", "float64":
+		return "0"
+	case "bool":
+		return "false"
+	case "string":
+		return `""`
+	case "byte":
+		return "0"
+	case "rune":
+		return "0"
+	default:
+		if strings.HasPrefix(goType, "*") ||
+			strings.HasPrefix(goType, "[]") ||
+			strings.HasPrefix(goType, "map[") ||
+			goType == "interface{}" ||
+			goType == "error" {
+			return "nil"
+		}
+		// Para structs, retorna struct literal vazia
+		return goType + "{}"
+	}
+}
+
+// CanUseStack verifica se o tipo pode ser alocado na stack
+func (tm *TypeMapper) CanUseStack(goType string) bool {
+	// Tipos pequenos podem ir para stack
+	smallTypes := map[string]bool{
+		"int64":   true,
+		"float64": true,
+		"bool":    true,
+		"byte":    true,
+		"rune":    true,
+	}
+
+	if smallTypes[goType] {
+		return true
+	}
+
+	// Ponteiros para tipos pequenos também
+	if strings.HasPrefix(goType, "*") {
+		base := goType[1:]
+		return smallTypes[base] || base == "string"
+	}
+
+	return false
+}
+
+func (tm *TypeMapper) mapParserType(t parser.Type) string {
+	switch pt := t.(type) {
+	case *parser.PrimitiveType:
+		switch pt.Name {
+		case "int":
+			return "int"
+		case "float":
+			return "float64"
+		case "bool":
+			return "bool"
+		case "string":
+			return "string"
+		case "byte":
+			return "byte"
+		case "char":
+			return "rune"
+		case "error":
+			return "error"
+		case "void":
+			return ""
+		default:
+			return "interface{}"
+		}
+
+	case *parser.IdentifierType:
+		// Tipos definidos pelo usuário
+		return pt.Name
+
+	case *parser.GenericType:
+		// Para tipos genéricos, usamos interface{} como fallback
+		if len(pt.TypeArgs) == 0 {
+			return pt.Name
+		}
+		return "interface{}"
+
+	case *parser.ArrayType:
+		elemType := tm.mapParserType(pt.ElementType)
+		return "[]" + elemType
+
+	case *parser.MapType:
+		keyType := tm.mapParserType(pt.KeyType)
+		valueType := tm.mapParserType(pt.ValueType)
+		return fmt.Sprintf("map[%s]%s", keyType, valueType)
+
+	case *parser.PointerType:
+		baseType := tm.mapParserType(pt.BaseType)
+		return "*" + baseType
+
+	case *parser.NullableType:
+		baseType := tm.mapParserType(pt.BaseType)
+		return "*" + baseType
+
+	case *parser.UnionType:
+		// Para union types, usamos interface{}
+		return "interface{}"
+
+	case *parser.SetType:
+		elemType := tm.mapParserType(pt.ElementType)
+		return fmt.Sprintf("map[%s]struct{}", elemType)
+
+	default:
+		return "interface{}"
+	}
+}
+package codegen
+
+import (
+	"strings"
+
+	"github.com/alpha/internal/ir"
+)
+
+type CompilationPipeline struct {
+	module        *ir.Module
+	optimizer     *ir.Optimizer
+	registerAlloc *RegisterAllocator
+}
+
+func NewPipeline(module *ir.Module) *CompilationPipeline {
+	return &CompilationPipeline{
+		module:        module,
+		optimizer:     ir.NewOptimizer(module),
+		registerAlloc: NewRegisterAllocator(),
+	}
+}
+
+func (p *CompilationPipeline) Compile() string {
+	// Fase 1: Otimizações no IR
+	p.optimizer.Optimize()
+
+	// Fase 2: Alocação de registros
+	for _, fn := range p.module.Functions {
+		p.registerAlloc.Allocate(fn)
+	}
+
+	// Fase 3: Geração de código
+	emitter := NewOptimizedEmitter(p.module)
+	code := emitter.Emit()
+
+	// Fase 4: Pós-processamento
+	code = p.postProcess(code)
+
+	return code
+}
+
+func (p *CompilationPipeline) postProcess(code string) string {
+	// Remove código morto após goto
+	lines := strings.Split(code, "\n")
+	var result []string
+	unreachable := false
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Detecta goto incondicional
+		if strings.HasPrefix(trimmed, "goto") && !strings.Contains(trimmed, "if") {
+			unreachable = true
+			result = append(result, line)
+		} else if strings.HasSuffix(trimmed, ":") {
+			unreachable = false
+			result = append(result, line)
+		} else if !unreachable || strings.HasPrefix(trimmed, "//") {
+			result = append(result, line)
+		}
+	}
+
+	// Remove variáveis não utilizadas
+	result = p.removeUnusedVars(result)
+
+	return strings.Join(result, "\n")
+}
+
+func (p *CompilationPipeline) removeUnusedVars(lines []string) []string {
+	usedVars := make(map[string]bool)
+
+	// Primeira passagem: coleta variáveis usadas
+	for _, line := range lines {
+		if strings.Contains(line, "var ") {
+			continue
+		}
+
+		// Extrai identificadores
+		words := strings.FieldsFunc(line, func(r rune) bool {
+			return r == ' ' || r == '=' || r == '+' || r == '-' || r == '*' ||
+				r == '/' || r == '[' || r == ']' || r == '(' || r == ')' ||
+				r == ',' || r == ';' || r == ':' || r == '{' || r == '}'
+		})
+
+		for _, word := range words {
+			if strings.HasPrefix(word, "t") && len(word) > 1 {
+				// Verifica se é um número após o 't'
+				allDigits := true
+				for _, ch := range word[1:] {
+					if ch < '0' || ch > '9' {
+						allDigits = false
+						break
+					}
+				}
+				if allDigits {
+					usedVars[word] = true
+				}
+			}
+		}
+	}
+
+	// Segunda passagem: remove declarações não usadas
+	var result []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "var t") {
+			varName := strings.Fields(trimmed)[1]
+			if used, exists := usedVars[varName]; !exists || !used {
+				continue // Remove declaração não usada
+			}
+		}
+		result = append(result, line)
+	}
+
+	return result
+}
+
+type OptimizationPass interface {
+	Apply(*ir.Module)
+}
+
+type ConstantPropagation struct{}
+type DeadCodeElimination struct{}
+type InlineSmallFunctions struct{}
+type LoopUnrolling struct{}
+type RegisterAllocation struct{}
+
+func (cp *ConstantPropagation) Apply(m *ir.Module) {
+	for _, fn := range m.Functions {
+		cp.applyToFunction(fn)
+	}
+}
+
+func (cp *ConstantPropagation) applyToFunction(fn *ir.Function) {
+	// Implementação simplificada
+	constants := make(map[string]*ir.Operand)
+
+	for i := 0; i < len(fn.Instructions); i++ {
+		instr := fn.Instructions[i]
+
+		// Propaga constantes
+		if instr.Op == ir.MOV && instr.Arg1 != nil && instr.Arg1.Kind == ir.OpLiteral {
+			constants[instr.Result.Value] = instr.Arg1
+		}
+
+		// Substitui usos de constantes
+		if instr.Arg1 != nil && constants[instr.Arg1.Value] != nil {
+			instr.Arg1 = constants[instr.Arg1.Value]
+		}
+		if instr.Arg2 != nil && constants[instr.Arg2.Value] != nil {
+			instr.Arg2 = constants[instr.Arg2.Value]
+		}
+	}
+}
+package codegen
+
+import "github.com/alpha/internal/ir"
+
+type RegisterAllocator struct {
+	registers map[string]int // variável -> registro
+	nextReg   int
+}
+
+func NewRegisterAllocator() *RegisterAllocator {
+	return &RegisterAllocator{
+		registers: make(map[string]int),
+		nextReg:   0,
+	}
+}
+
+func (ra *RegisterAllocator) Allocate(fn *ir.Function) {
+	// Para cada variável, atribui um "registro" (na prática, otimiza o uso de variáveis)
+
+	// 1. Coleta variáveis vivas
+	liveRanges := ra.computeLiveRanges(fn)
+
+	// 2. Ordena por uso
+	sortedVars := ra.sortByUse(fn)
+
+	// 3. Atribui "registros"
+	for _, varName := range sortedVars {
+		if range_, exists := liveRanges[varName]; exists {
+			// Tenta reusar registro
+			reg := ra.findAvailableRegister(range_)
+			ra.registers[varName] = reg
+		}
+	}
+}
+
+func (ra *RegisterAllocator) computeLiveRanges(fn *ir.Function) map[string][]int {
+	ranges := make(map[string][]int)
+
+	for i, instr := range fn.Instructions {
+		// Definições
+		if instr.Result != nil {
+			varName := instr.Result.Value
+			ranges[varName] = append(ranges[varName], i)
+		}
+
+		// Usos
+		if instr.Arg1 != nil {
+			varName := instr.Arg1.Value
+			ranges[varName] = append(ranges[varName], i)
+		}
+		if instr.Arg2 != nil {
+			varName := instr.Arg2.Value
+			ranges[varName] = append(ranges[varName], i)
+		}
+	}
+
+	return ranges
+}
+
+func (ra *RegisterAllocator) sortByUse(fn *ir.Function) []string {
+	useCount := make(map[string]int)
+
+	for _, instr := range fn.Instructions {
+		if instr.Arg1 != nil {
+			useCount[instr.Arg1.Value]++
+		}
+		if instr.Arg2 != nil {
+			useCount[instr.Arg2.Value]++
+		}
+	}
+
+	// Ordena por frequência de uso (decrescente)
+	var sorted []string
+	for varName := range useCount {
+		sorted = append(sorted, varName)
+	}
+
+	// TODO: Implementar ordenação por uso
+	return sorted
+}
+
+func (ra *RegisterAllocator) findAvailableRegister(range_ []int) int {
+	// Algoritmo simplificado: retorna próximo registro disponível
+	reg := ra.nextReg
+	ra.nextReg++
+	return reg
+}
+
+func (ra *RegisterAllocator) GetRegister(varName string) int {
+	if reg, ok := ra.registers[varName]; ok {
+		return reg
+	}
+	return -1
+}
+package codegen
+
+// GetRuntime retorna o código Go padrão que todo arquivo precisa ter
+func GetRuntime() string {
+	return ``
 }

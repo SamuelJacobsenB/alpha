@@ -57,6 +57,13 @@ const (
 	MAKE_MAP   // t1 = make(map[K]V)
 	CAST       // t1 = type(t2)
 	NOP        // No Operation
+
+	// Operações para built-ins (adicionadas)
+	REMOVE       // remove(&arr, element)
+	REMOVE_INDEX // removeIndex(&arr, index)
+	DELETE       // delete(&map, key)
+	CLEAR        // clear(&map | &set)
+	HAS          // has(&set, value)
 )
 
 // OperandType define o tipo do operando
@@ -129,6 +136,18 @@ func (i *Instruction) String() string {
 		sb.WriteString(", ")
 		sb.WriteString(i.Arg2.String())
 	}
+
+	// Para CALL com múltiplos argumentos
+	if i.Op == CALL && len(i.Args) > 0 {
+		sb.WriteString("(")
+		for j, arg := range i.Args {
+			if j > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(arg.String())
+		}
+		sb.WriteString(")")
+	}
 	return sb.String()
 }
 
@@ -140,6 +159,7 @@ func (i *Instruction) opToString() string {
 		"MOV", "LOAD", "STORE", "ALLOCA", "GET_FIELD", "GET_INDEX", "GET_ADDR",
 		"LABEL", "JMP", "JMP_TRUE", "JMP_FALSE", "CALL", "RET", "PHI",
 		"LEN", "APPEND", "MAKE_SLICE", "MAKE_MAP", "CAST", "NOP",
+		"REMOVE", "REMOVE_INDEX", "DELETE", "CLEAR", "HAS", // Novas operações
 	}
 	if int(i.Op) < len(names) {
 		return names[i.Op]
@@ -165,6 +185,10 @@ type Function struct {
 	LabelCount   int            // Contador para labels
 	ReturnType   semantic.Type
 	IsExported   bool
+	Generics     []string
+	// Pilha de labels para break/continue
+	BreakLabels    []string
+	ContinueLabels []string
 }
 
 // Module representa o programa inteiro (pacote)

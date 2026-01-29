@@ -105,7 +105,7 @@ generic<T> struct Car {
     int year
 }
 
-Car<string> car = Car<string> {
+Car car = generic<string> Car {
     motor: "654MT4",
     year: 2001
 }
